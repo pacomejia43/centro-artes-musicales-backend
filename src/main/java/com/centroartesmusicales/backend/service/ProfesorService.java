@@ -67,5 +67,6 @@ public class ProfesorService {
         Profesor profesor = obtenerPorId(id);
         profesor.setActivo(false);
         profesorRepository.save(profesor);
+        profesorRepository.flush(); // Fuerza la escritura inmediata en la base de datos
     }
 }
