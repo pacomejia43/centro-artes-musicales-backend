@@ -12,6 +12,7 @@ public record CrearAlumnoRequest(
         @NotBlank @Size(min = 8, max = 100) String password,
         @NotBlank String nombre,
         String telefono,
-        @Past LocalDate fechaNacimiento
+        @Past LocalDate fechaNacimiento,
+        LocalDate fechaPrimeraClase
 ) {
 }

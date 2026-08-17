@@ -59,7 +59,9 @@ public class ProfesorService {
         if (request.activo() != null) {
             profesor.setActivo(request.activo());
         }
-        return profesorRepository.save(profesor);
+        Profesor guardado = profesorRepository.save(profesor);
+        profesorRepository.flush(); // Fuerza la escritura inmediata en la base de datos (ver desactivar())
+        return guardado;
     }
 
     @Transactional

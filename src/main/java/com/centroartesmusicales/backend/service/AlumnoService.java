@@ -49,6 +49,7 @@ public class AlumnoService {
                 .telefono(request.telefono())
                 .fechaNacimiento(request.fechaNacimiento())
                 .fechaInscripcion(LocalDate.now())
+                .fechaPrimeraClase(request.fechaPrimeraClase())
                 .activo(true)
                 .build();
 
@@ -98,19 +99,33 @@ public class AlumnoService {
         if (request.activo() != null) {
             alumno.setActivo(request.activo());
         }
-        return alumnoRepository.save(alumno);
+        if (request.fechaPrimeraClase() != null) {
+            alumno.setFechaPrimeraClase(request.fechaPrimeraClase());
+        }
+        Alumno guardado = alumnoRepository.save(alumno);
+        alumnoRepository.flush(); // Fuerza la escritura inmediata en la base de datos (ver desactivar())
+        return guardado;
     }
 
     @Transactional
     public Alumno actualizarPerfil(Long usuarioId, ActualizarPerfilRequest request) {
         Alumno alumno = obtenerPorUsuarioId(usuarioId);
         aplicarCambiosComunes(alumno, request.nombre(), request.telefono(), request.fechaNacimiento());
-        return alumnoRepository.save(alumno);
+        Alumno guardado = alumnoRepository.save(alumno);
+        alumnoRepository.flush();
+        return guardado;
     }
 
+    /**
+     * El nombre vive en Usuario, no en Alumno (relación @OneToOne perezosa) — se guarda
+     * explícitamente en su propio repositorio en vez de confiar solo en el dirty-checking
+     * de Hibernate, para que "editar alumno" nunca deje el nombre sin persistir.
+     */
     private void aplicarCambiosComunes(Alumno alumno, String nombre, String telefono, LocalDate fechaNacimiento) {
         if (nombre != null && !nombre.isBlank()) {
-            alumno.getUsuario().setNombre(nombre);
+            Usuario usuario = alumno.getUsuario();
+            usuario.setNombre(nombre);
+            usuarioRepository.save(usuario);
         }
         if (telefono != null) {
             alumno.setTelefono(telefono);

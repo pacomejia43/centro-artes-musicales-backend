@@ -9,6 +9,7 @@ public record ActualizarAlumnoRequest(
         String telefono,
         @Past LocalDate fechaNacimiento,
         String googleDocsUrl,
-        Boolean activo
+        Boolean activo,
+        LocalDate fechaPrimeraClase
 ) {
 }

@@ -48,6 +48,9 @@ public class Alumno extends Auditable {
     @Column(nullable = false)
     private LocalDate fechaInscripcion;
 
+    /** Fecha de la primera clase del ciclo vigente (ver util.CicloClases) — la captura el admin. */
+    private LocalDate fechaPrimeraClase;
+
     @Column(name = "google_docs_url", length = 500)
     private String googleDocsUrl;
 

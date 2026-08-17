@@ -7,8 +7,10 @@ import com.centroartesmusicales.backend.dto.alumno.CrearAlumnoRequest;
 import com.centroartesmusicales.backend.dto.alumno.ResetPasswordRequest;
 import com.centroartesmusicales.backend.dto.clase.ResumenMesResponse;
 import com.centroartesmusicales.backend.mapper.AlumnoMapper;
+import com.centroartesmusicales.backend.model.Alumno;
 import com.centroartesmusicales.backend.service.AlumnoService;
 import com.centroartesmusicales.backend.service.ClaseService;
+import com.centroartesmusicales.backend.service.PagoService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -34,10 +36,12 @@ public class AlumnoAdminController {
 
     private final AlumnoService alumnoService;
     private final ClaseService claseService;
+    private final PagoService pagoService;
 
     @PostMapping
     public ResponseEntity<AlumnoResponse> crear(@Valid @RequestBody CrearAlumnoRequest request) {
         var alumno = alumnoService.crear(request);
+        asegurarCargoDeCiclo(alumno);
         return ResponseEntity.status(HttpStatus.CREATED).body(AlumnoMapper.toResponse(alumno));
     }
 
@@ -56,7 +60,16 @@ public class AlumnoAdminController {
     @PutMapping("/{id}")
     public ResponseEntity<AlumnoResponse> actualizar(@PathVariable Long id,
                                                        @Valid @RequestBody ActualizarAlumnoRequest request) {
-        return ResponseEntity.ok(AlumnoMapper.toResponse(alumnoService.actualizar(id, request)));
+        var alumno = alumnoService.actualizar(id, request);
+        asegurarCargoDeCiclo(alumno);
+        return ResponseEntity.ok(AlumnoMapper.toResponse(alumno));
+    }
+
+    /** Si el alumno ya tiene fecha de primera clase, garantiza que exista el cargo de ese ciclo (ver PagoService). */
+    private void asegurarCargoDeCiclo(Alumno alumno) {
+        if (alumno.getFechaPrimeraClase() != null) {
+            pagoService.crearCargoCicloSiNoExiste(alumno.getId(), alumno.getFechaPrimeraClase());
+        }
     }
 
     @DeleteMapping("/{id}")

@@ -14,6 +14,7 @@ import com.centroartesmusicales.backend.model.Usuario;
 import com.centroartesmusicales.backend.repository.PagoRepository;
 import com.centroartesmusicales.backend.repository.PagoTransaccionRepository;
 import com.centroartesmusicales.backend.repository.UsuarioRepository;
+import com.centroartesmusicales.backend.util.CicloClases;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -25,6 +26,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -103,6 +105,34 @@ public class PagoService {
                 .estado(EstadoPago.PENDIENTE)
                 .build();
         return pagoRepository.save(pago);
+    }
+
+    /**
+     * Crea el cargo del ciclo de 4 clases (ver CicloClases) si todavía no existe uno para esa
+     * fecha límite u ese período — se llama cada vez que se guarda fechaPrimeraClase del alumno,
+     * así que debe ser idempotente en vez de asumir que es la primera vez que se invoca.
+     */
+    @Transactional
+    public Optional<Pago> crearCargoCicloSiNoExiste(Long alumnoId, LocalDate fechaPrimeraClase) {
+        LocalDate fechaLimite = CicloClases.proximoPago(fechaPrimeraClase);
+        if (pagoRepository.existsByAlumno_IdAndFechaLimite(alumnoId, fechaLimite)) {
+            return Optional.empty();
+        }
+        YearMonth periodo = YearMonth.from(fechaLimite);
+        if (pagoRepository.existsByAlumno_IdAndPeriodo(alumnoId, periodo)) {
+            return Optional.empty();
+        }
+
+        Alumno alumno = alumnoService.obtenerPorId(alumnoId);
+        Pago pago = Pago.builder()
+                .alumno(alumno)
+                .monto(appProperties.pagos().montoMensualDefault())
+                .periodo(periodo)
+                .fechaLimite(fechaLimite)
+                .notas("Generado automáticamente: ciclo de 4 clases desde " + fechaPrimeraClase)
+                .estado(EstadoPago.PENDIENTE)
+                .build();
+        return Optional.of(pagoRepository.save(pago));
     }
 
     /** Admin-entered payments are auto-confirmed — the admin action IS the confirmation. */

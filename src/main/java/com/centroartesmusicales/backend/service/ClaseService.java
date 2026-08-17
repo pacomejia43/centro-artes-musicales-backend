@@ -21,15 +21,19 @@ import com.centroartesmusicales.backend.model.SolicitudReagendacion;
 import com.centroartesmusicales.backend.repository.ClaseRepository;
 import com.centroartesmusicales.backend.repository.SolicitudReagendacionRepository;
 import com.centroartesmusicales.backend.repository.UsuarioRepository;
+import com.centroartesmusicales.backend.util.CicloClases;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -109,6 +113,33 @@ public class ClaseService {
             clase = claseRepository.save(clase);
         }
         return clase;
+    }
+
+    /**
+     * Agenda de un solo golpe las 4 clases semanales del ciclo vigente (ver CicloClases), a partir
+     * de alumno.fechaPrimeraClase. Todo o nada: si cualquiera de las 4 choca con un horario
+     * ocupado o excede el cupo mensual, no se crea ninguna.
+     */
+    @Transactional
+    public List<Clase> programarCiclo(Long alumnoId, Long profesorId, Instrumento instrumento,
+                                       LocalTime horaClase, Integer duracionMinutos, String notas) {
+        Alumno alumno = alumnoService.obtenerPorId(alumnoId);
+        if (alumno.getFechaPrimeraClase() == null) {
+            throw new BusinessRuleException("El alumno no tiene registrada su fecha de primera clase");
+        }
+        Profesor profesor = profesorService.obtenerPorId(profesorId);
+        int duracion = duracionMinutos != null ? duracionMinutos : appProperties.clases().duracionDefaultMinutos();
+
+        List<Clase> creadas = new ArrayList<>();
+        for (LocalDate fecha : CicloClases.fechasClases(alumno.getFechaPrimeraClase())) {
+            Clase clase = crearClaseInterna(alumno, profesor, instrumento, fecha.atTime(horaClase), duracion, null);
+            if (notas != null && !notas.isBlank()) {
+                clase.setNotas(notas);
+                clase = claseRepository.save(clase);
+            }
+            creadas.add(clase);
+        }
+        return creadas;
     }
 
     @Transactional

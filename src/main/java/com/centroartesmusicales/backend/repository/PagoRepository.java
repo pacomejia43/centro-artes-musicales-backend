@@ -8,12 +8,15 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.Optional;
 
 public interface PagoRepository extends JpaRepository<Pago, Long> {
 
     boolean existsByAlumno_IdAndPeriodo(Long alumnoId, YearMonth periodo);
+
+    boolean existsByAlumno_IdAndFechaLimite(Long alumnoId, LocalDate fechaLimite);
 
     Optional<Pago> findByAlumno_IdAndPeriodo(Long alumnoId, YearMonth periodo);
 

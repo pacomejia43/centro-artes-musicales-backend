@@ -3,6 +3,7 @@ package com.centroartesmusicales.backend.controller.admin;
 import com.centroartesmusicales.backend.dto.clase.CancelarClaseRequest;
 import com.centroartesmusicales.backend.dto.clase.ClaseResponse;
 import com.centroartesmusicales.backend.dto.clase.MarcarAsistenciaRequest;
+import com.centroartesmusicales.backend.dto.clase.ProgramarCicloClasesRequest;
 import com.centroartesmusicales.backend.dto.clase.ProgramarClaseRequest;
 import com.centroartesmusicales.backend.dto.clase.ReagendarRequest;
 import com.centroartesmusicales.backend.model.EstadoClase;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/admin/clases")
@@ -37,6 +39,13 @@ public class ClaseAdminController {
     public ResponseEntity<ClaseResponse> programar(@Valid @RequestBody ProgramarClaseRequest request) {
         var clase = claseService.programar(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ClaseMapper.toResponse(clase));
+    }
+
+    @PostMapping("/ciclo")
+    public ResponseEntity<List<ClaseResponse>> programarCiclo(@Valid @RequestBody ProgramarCicloClasesRequest request) {
+        var clases = claseService.programarCiclo(request.alumnoId(), request.profesorId(), request.instrumento(),
+                request.horaClase(), request.duracionMinutos(), request.notas());
+        return ResponseEntity.status(HttpStatus.CREATED).body(clases.stream().map(ClaseMapper::toResponse).toList());
     }
 
     @GetMapping

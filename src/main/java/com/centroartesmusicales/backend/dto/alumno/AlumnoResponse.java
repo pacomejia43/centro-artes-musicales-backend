@@ -1,6 +1,7 @@
 package com.centroartesmusicales.backend.dto.alumno;
 
 import java.time.LocalDate;
+import java.util.List;
 
 public record AlumnoResponse(
         Long id,
@@ -10,6 +11,9 @@ public record AlumnoResponse(
         String telefono,
         LocalDate fechaNacimiento,
         LocalDate fechaInscripcion,
-        boolean activo
+        boolean activo,
+        LocalDate fechaPrimeraClase,
+        List<LocalDate> fechasCicloClases,
+        LocalDate proximoPago
 ) {
 }
