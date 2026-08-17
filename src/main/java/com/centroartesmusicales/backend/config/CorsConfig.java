@@ -18,7 +18,10 @@ public class CorsConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(appProperties.cors().allowedOrigins());
+        // Patterns (not plain origins) so a single entry like https://*.vercel.app covers every
+        // Vercel preview deployment URL, not just the production domain — still compatible with
+        // allowCredentials(true), unlike a literal "*" origin.
+        configuration.setAllowedOriginPatterns(appProperties.cors().allowedOrigins());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);

@@ -32,7 +32,8 @@ o `JWT_SECRET`, a propósito, para no repetir el problema de contraseña hardcod
 | `DB_PASSWORD` | **Sí** | — | Contraseña de MySQL |
 | `JWT_SECRET` | **Sí** | — | Secreto para firmar tokens JWT (HMAC-SHA256, mínimo 256 bits / 32+ caracteres) |
 | `JWT_EXPIRATION_MS` | No | `86400000` (24h) | Vigencia del token |
-| `CORS_ALLOWED_ORIGINS` | No | `http://localhost:3000,http://localhost:5500,http://127.0.0.1:5500` | Orígenes permitidos (separados por coma) — agregar aquí la URL del frontend desplegado |
+| `CORS_ALLOWED_ORIGINS` | No | `http://localhost:3000,http://localhost:5500,http://127.0.0.1:5500` | Orígenes permitidos (separados por coma). Admite patrones con `*`, útil para Vercel: `https://tu-sitio.vercel.app,https://*.vercel.app` cubre también los despliegues de preview |
+| `PORT` | No | `8080` | La define automáticamente Railway/Render/etc. — no hace falta configurarla a mano en esas plataformas |
 | `ADMIN_BOOTSTRAP_EMAIL` / `ADMIN_BOOTSTRAP_PASSWORD` | No | vacío | Si no existe ningún administrador al iniciar, se crea uno con estos datos. Si se dejan vacías, no se crea admin (con un WARN en el log) |
 | `ADMIN_BOOTSTRAP_NOMBRE` | No | `Administrador` | Nombre del admin inicial |
 | `APP_TIMEZONE` | No | `America/Mexico_City` | Zona horaria de negocio (agenda de clases, plazos) |
