@@ -43,8 +43,8 @@ public class AlumnoAdminController {
 
     @GetMapping
     public ResponseEntity<Page<AlumnoResponse>> listar(@RequestParam(required = false) Boolean activo,
-                                                         @RequestParam(required = false) String nombre,
-                                                         Pageable pageable) {
+                                                       @RequestParam(required = false) String nombre,
+                                                       Pageable pageable) {
         return ResponseEntity.ok(alumnoService.listar(activo, nombre, pageable).map(AlumnoMapper::toResponse));
     }
 
@@ -67,7 +67,7 @@ public class AlumnoAdminController {
 
     @PutMapping("/{id}/password")
     public ResponseEntity<Void> resetPassword(@PathVariable Long id,
-                                               @Valid @RequestBody ResetPasswordRequest request) {
+                                              @Valid @RequestBody ResetPasswordRequest request) {
         alumnoService.resetPassword(id, request.passwordNueva());
         return ResponseEntity.noContent().build();
     }
@@ -79,7 +79,7 @@ public class AlumnoAdminController {
 
     @GetMapping("/{id}/resumen-mes")
     public ResponseEntity<ResumenMesResponse> resumenMes(@PathVariable Long id,
-                                                           @RequestParam(required = false) YearMonth periodo) {
+                                                          @RequestParam(required = false) YearMonth periodo) {
         return ResponseEntity.ok(claseService.resumenMes(id, periodo));
     }
 }

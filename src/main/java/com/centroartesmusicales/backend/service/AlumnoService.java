@@ -12,7 +12,9 @@ import com.centroartesmusicales.backend.repository.AlumnoRepository;
 import com.centroartesmusicales.backend.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,7 +29,6 @@ public class AlumnoService {
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
 
-    /** Shared by admin-create (POST /api/admin/alumnos) and self-registro (POST /api/auth/registro). */
     @Transactional
     public Alumno crear(CrearAlumnoRequest request) {
         if (usuarioRepository.existsByEmail(request.email())) {
@@ -55,13 +56,26 @@ public class AlumnoService {
     }
 
     public Page<Alumno> listar(Boolean activo, String nombre, Pageable pageable) {
+        Pageable pageableCorregido = pageable;
+        if (pageable.getSort().isSorted()) {
+            Sort sortCorregido = Sort.unsorted();
+            for (Sort.Order order : pageable.getSort()) {
+                String property = order.getProperty();
+                if ("nombre".equals(property)) {
+                    property = "usuario.nombre";
+                }
+                sortCorregido = sortCorregido.and(Sort.by(order.getDirection(), property));
+            }
+            pageableCorregido = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sortCorregido);
+        }
+
         if (nombre != null && !nombre.isBlank()) {
-            return alumnoRepository.findByUsuario_NombreContainingIgnoreCase(nombre, pageable);
+            return alumnoRepository.findByUsuario_NombreContainingIgnoreCase(nombre, pageableCorregido);
         }
         if (activo != null) {
-            return alumnoRepository.findByActivo(activo, pageable);
+            return alumnoRepository.findByActivo(activo, pageableCorregido);
         }
-        return alumnoRepository.findAll(pageable);
+        return alumnoRepository.findAll(pageableCorregido);
     }
 
     public Alumno obtenerPorId(Long id) {
@@ -106,12 +120,12 @@ public class AlumnoService {
         }
     }
 
-    /** Baja lógica: el alumno deja de estar inscrito. No bloquea su login (podría seguir viendo su historial). */
     @Transactional
     public void desactivar(Long id) {
         Alumno alumno = obtenerPorId(id);
         alumno.setActivo(false);
         alumnoRepository.save(alumno);
+        alumnoRepository.flush(); // Fuerza la escritura inmediata en la base de datos
     }
 
     @Transactional
