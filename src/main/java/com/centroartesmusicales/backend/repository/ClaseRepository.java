@@ -57,6 +57,9 @@ public interface ClaseRepository extends JpaRepository<Clase, Long> {
                                   @Param("estados") List<EstadoClase> estados,
                                   @Param("desde") LocalDateTime desde);
 
+    /** Antes de eliminar: si otra clase apunta a esta como su origen (reagendo), no se puede borrar. */
+    boolean existsByClaseOriginal_Id(Long claseOriginalId);
+
     @Query("SELECT c FROM Clase c WHERE "
             + "(:alumnoId IS NULL OR c.alumno.id = :alumnoId) AND "
             + "(:profesorId IS NULL OR c.profesor.id = :profesorId) AND "

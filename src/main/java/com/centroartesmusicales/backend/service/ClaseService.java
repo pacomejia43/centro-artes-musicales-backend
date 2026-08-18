@@ -232,6 +232,25 @@ public class ClaseService {
         return ejecutarReagendo(original, destino, request.fechaHoraPropuesta());
     }
 
+    /**
+     * Borra la clase por completo (a diferencia de cancelar, que la conserva como CANCELADA).
+     * Se rechaza si otra fila depende de ella por FK (fue el origen de un reagendo, o tiene una
+     * solicitud de reagendación asociada) — ahí hay que usar "Cancelar" en su lugar.
+     */
+    @Transactional
+    public void eliminar(Long claseId) {
+        Clase clase = obtenerPorId(claseId);
+        if (claseRepository.existsByClaseOriginal_Id(claseId)) {
+            throw new BusinessRuleException(
+                    "No se puede eliminar: esta clase es el origen de una reagendación. Usa \"Cancelar\" en su lugar.");
+        }
+        if (solicitudReagendacionRepository.existsByClase_IdOrClaseNueva_Id(claseId, claseId)) {
+            throw new BusinessRuleException(
+                    "No se puede eliminar: esta clase tiene una solicitud de reagendación asociada. Usa \"Cancelar\" en su lugar.");
+        }
+        claseRepository.delete(clase);
+    }
+
     @Transactional
     public void cancelar(Long claseId, String motivo) {
         Clase clase = obtenerPorId(claseId);

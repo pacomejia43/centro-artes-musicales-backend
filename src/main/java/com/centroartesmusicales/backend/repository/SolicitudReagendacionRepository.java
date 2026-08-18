@@ -10,6 +10,8 @@ public interface SolicitudReagendacionRepository extends JpaRepository<Solicitud
 
     boolean existsByClase_IdAndEstado(Long claseId, EstadoSolicitud estado);
 
+    boolean existsByClase_IdOrClaseNueva_Id(Long claseId, Long claseNuevaId);
+
     Page<SolicitudReagendacion> findByClase_Alumno_Id(Long alumnoId, Pageable pageable);
 
     Page<SolicitudReagendacion> findByEstado(EstadoSolicitud estado, Pageable pageable);

@@ -1,5 +1,7 @@
 package com.centroartesmusicales.backend.controller.admin;
 
+import com.centroartesmusicales.backend.config.AppProperties;
+import com.centroartesmusicales.backend.dto.pago.ConfiguracionPagoResponse;
 import com.centroartesmusicales.backend.dto.pago.CrearPagoRequest;
 import com.centroartesmusicales.backend.dto.pago.PagoResponse;
 import com.centroartesmusicales.backend.dto.pago.PagoTransaccionResponse;
@@ -34,9 +36,16 @@ import java.time.YearMonth;
 public class PagoAdminController {
 
     private final PagoService pagoService;
+    private final AppProperties appProperties;
 
     private PagoResponse toResponse(Pago pago) {
         return PagoMapper.toResponse(pago, pagoService.montoPagado(pago), pagoService.esVencido(pago));
+    }
+
+    /** Precio general vigente (el que aplica a un alumno sin precioMensual particular). */
+    @GetMapping("/pagos/config")
+    public ResponseEntity<ConfiguracionPagoResponse> configuracion() {
+        return ResponseEntity.ok(new ConfiguracionPagoResponse(appProperties.pagos().montoMensualDefault()));
     }
 
     @PostMapping("/alumnos/{alumnoId}/pagos")
