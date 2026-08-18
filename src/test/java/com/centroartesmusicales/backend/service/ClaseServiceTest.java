@@ -18,6 +18,7 @@ import com.centroartesmusicales.backend.model.Profesor;
 import com.centroartesmusicales.backend.model.Role;
 import com.centroartesmusicales.backend.model.SolicitudReagendacion;
 import com.centroartesmusicales.backend.model.Usuario;
+import com.centroartesmusicales.backend.repository.AlumnoInstrumentoCupoRepository;
 import com.centroartesmusicales.backend.repository.ClaseRepository;
 import com.centroartesmusicales.backend.repository.SolicitudReagendacionRepository;
 import com.centroartesmusicales.backend.repository.UsuarioRepository;
@@ -63,6 +64,8 @@ class ClaseServiceTest {
     private AlumnoService alumnoService;
     @Mock
     private ProfesorService profesorService;
+    @Mock
+    private AlumnoInstrumentoCupoRepository cupoRepository;
 
     private ClaseService claseService;
 
@@ -81,7 +84,7 @@ class ClaseServiceTest {
         );
 
         claseService = new ClaseService(claseRepository, solicitudReagendacionRepository, usuarioRepository,
-                alumnoService, profesorService, appProperties);
+                alumnoService, profesorService, cupoRepository, appProperties);
 
         Usuario usuario = Usuario.builder().id(1L).email("valentina@test.com").nombre("Valentina")
                 .password("hash").role(Role.ALUMNO).enabled(true).build();
