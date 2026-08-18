@@ -38,6 +38,14 @@ public interface ClaseRepository extends JpaRepository<Clase, Long> {
                                          @Param("hasta") LocalDateTime hasta,
                                          @Param("excludeId") Long excludeId);
 
+    /** Clases activas (no reagendadas/canceladas) desde una fecha, ascendente — para resolver el
+     * estado actual del ciclo de un alumno, incluyendo cualquier reagendo ya aprobado. */
+    @Query("SELECT c FROM Clase c WHERE c.alumno.id = :alumnoId AND c.estado IN :estados "
+            + "AND c.fechaHora >= :desde ORDER BY c.fechaHora ASC")
+    List<Clase> findActivasDesde(@Param("alumnoId") Long alumnoId,
+                                  @Param("estados") List<EstadoClase> estados,
+                                  @Param("desde") LocalDateTime desde);
+
     @Query("SELECT c FROM Clase c WHERE "
             + "(:alumnoId IS NULL OR c.alumno.id = :alumnoId) AND "
             + "(:profesorId IS NULL OR c.profesor.id = :profesorId) AND "

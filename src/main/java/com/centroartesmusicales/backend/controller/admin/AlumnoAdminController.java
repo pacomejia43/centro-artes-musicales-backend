@@ -27,7 +27,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/admin/alumnos")
@@ -43,19 +45,19 @@ public class AlumnoAdminController {
         var alumno = alumnoService.crear(request.email(), request.password(), request.nombre(),
                 request.telefono(), request.fechaNacimiento(), request.fechaPrimeraClase());
         asegurarCargoDeCiclo(alumno);
-        return ResponseEntity.status(HttpStatus.CREATED).body(AlumnoMapper.toResponse(alumno));
+        return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(alumno));
     }
 
     @GetMapping
     public ResponseEntity<Page<AlumnoResponse>> listar(@RequestParam(required = false) Boolean activo,
                                                        @RequestParam(required = false) String nombre,
                                                        Pageable pageable) {
-        return ResponseEntity.ok(alumnoService.listar(activo, nombre, pageable).map(AlumnoMapper::toResponse));
+        return ResponseEntity.ok(alumnoService.listar(activo, nombre, pageable).map(this::toResponse));
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<AlumnoResponse> obtener(@PathVariable Long id) {
-        return ResponseEntity.ok(AlumnoMapper.toResponse(alumnoService.obtenerPorId(id)));
+        return ResponseEntity.ok(toResponse(alumnoService.obtenerPorId(id)));
     }
 
     @PutMapping("/{id}")
@@ -63,7 +65,7 @@ public class AlumnoAdminController {
                                                        @Valid @RequestBody ActualizarAlumnoRequest request) {
         var alumno = alumnoService.actualizar(id, request);
         asegurarCargoDeCiclo(alumno);
-        return ResponseEntity.ok(AlumnoMapper.toResponse(alumno));
+        return ResponseEntity.ok(toResponse(alumno));
     }
 
     /** Si el alumno ya tiene fecha de primera clase, garantiza que exista el cargo de ese ciclo (ver PagoService). */
@@ -71,6 +73,14 @@ public class AlumnoAdminController {
         if (alumno.getFechaPrimeraClase() != null) {
             pagoService.crearCargoCicloSiNoExiste(alumno.getId(), alumno.getFechaPrimeraClase());
         }
+    }
+
+    /** Resuelve las fechas reales del ciclo (si ya se agendaron) antes de mapear a la respuesta. */
+    private AlumnoResponse toResponse(Alumno alumno) {
+        List<LocalDate> fechasCiclo = alumno.getFechaPrimeraClase() != null
+                ? claseService.resolverFechasCiclo(alumno.getId(), alumno.getFechaPrimeraClase())
+                : null;
+        return AlumnoMapper.toResponse(alumno, fechasCiclo);
     }
 
     @DeleteMapping("/{id}")

@@ -5,13 +5,19 @@ import com.centroartesmusicales.backend.model.Alumno;
 import com.centroartesmusicales.backend.util.CicloClases;
 
 import java.time.LocalDate;
+import java.util.List;
 
 public final class AlumnoMapper {
 
     private AlumnoMapper() {
     }
 
-    public static AlumnoResponse toResponse(Alumno alumno) {
+    /**
+     * fechasCicloClases se recibe ya resuelto (ClaseService#resolverFechasCiclo) en vez de
+     * calcularse aquí en puro, porque puede reflejar clases reales ya reagendadas — este mapper
+     * no tiene acceso a ClaseRepository.
+     */
+    public static AlumnoResponse toResponse(Alumno alumno, List<LocalDate> fechasCicloClases) {
         LocalDate fechaPrimeraClase = alumno.getFechaPrimeraClase();
         return new AlumnoResponse(
                 alumno.getId(),
@@ -23,7 +29,7 @@ public final class AlumnoMapper {
                 alumno.getFechaInscripcion(),
                 alumno.isActivo(),
                 fechaPrimeraClase,
-                fechaPrimeraClase != null ? CicloClases.fechasClases(fechaPrimeraClase) : null,
+                fechasCicloClases,
                 fechaPrimeraClase != null ? CicloClases.proximoPago(fechaPrimeraClase) : null
         );
     }

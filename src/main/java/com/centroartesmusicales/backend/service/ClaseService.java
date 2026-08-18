@@ -87,21 +87,40 @@ public class ClaseService {
         LocalDateTime fin = mes.plusMonths(1).atDay(1).atStartOfDay();
         LocalDateTime ahora = LocalDateTime.now(zoneId());
 
-        // "Ocupadas" (para el cupo disponible) cuenta también las clases futuras ya agendadas —
-        // esas sí deben bloquear el cupo. "Tomadas" es solo lo que ya pasó: una PROGRAMADA en el
-        // futuro (p.ej. del ciclo generado de una vez) todavía no fue tomada.
-        long ocupadas = claseRepository.countOcupadasEnRango(alumnoId, ESTADOS_OCUPAN_CUPO, inicio, fin, null);
+        // "Tomadas" es solo lo que ya pasó: una PROGRAMADA en el futuro (p.ej. del ciclo generado
+        // de una vez) todavía no fue tomada. "Disponibles" es el resto del límite mensual — las
+        // dos cifras siempre deben sumar el límite (el cupo real ya lo bloquea verificarCupoMensual,
+        // que sí cuenta también las futuras; esto es solo para mostrarle el avance al alumno/admin).
         LocalDateTime finTomadas = ahora.isBefore(fin) ? ahora : fin;
         long tomadas = claseRepository.countOcupadasEnRango(alumnoId, ESTADOS_OCUPAN_CUPO, inicio, finTomadas, null);
 
         int limite = appProperties.clases().limiteMensual();
-        int disponibles = (int) Math.max(0, limite - ocupadas);
+        int disponibles = (int) Math.max(0, limite - tomadas);
         return new ResumenMesResponse(mes.toString(), (int) tomadas, limite, disponibles);
     }
 
     public ResumenMesResponse resumenMesPropio(Long usuarioId, YearMonth periodo) {
         Alumno alumno = alumnoService.obtenerPorUsuarioId(usuarioId);
         return resumenMes(alumno.getId(), periodo);
+    }
+
+    /**
+     * Fechas del ciclo de 4 clases de un alumno. Si ya se generaron las clases en el calendario
+     * (programarCiclo), usa sus fechas reales — así, si el alumno reagenda una y el admin la
+     * aprueba, la clase reagendada (nueva fila PROGRAMADA) reemplaza aquí a la original
+     * (que queda REAGENDADA y ya no cuenta). Si todavía no se han agendado, cae a la proyección
+     * pura de CicloClases, la misma que se le anunció al alumno al capturar la fecha.
+     */
+    public List<LocalDate> resolverFechasCiclo(Long alumnoId, LocalDate fechaPrimeraClase) {
+        List<Clase> reales = claseRepository.findActivasDesde(alumnoId, ESTADOS_OCUPAN_CUPO,
+                fechaPrimeraClase.atStartOfDay());
+        if (reales.isEmpty()) {
+            return CicloClases.fechasClases(fechaPrimeraClase);
+        }
+        return reales.stream()
+                .limit(CicloClases.CLASES_POR_CICLO)
+                .map(c -> c.getFechaHora().toLocalDate())
+                .toList();
     }
 
     // ---------------------------------------------------------------- escritura (admin)
