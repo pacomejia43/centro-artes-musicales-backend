@@ -2,7 +2,6 @@ package com.centroartesmusicales.backend.service;
 
 import com.centroartesmusicales.backend.dto.alumno.ActualizarAlumnoRequest;
 import com.centroartesmusicales.backend.dto.alumno.ActualizarPerfilRequest;
-import com.centroartesmusicales.backend.dto.alumno.CrearAlumnoRequest;
 import com.centroartesmusicales.backend.exception.BusinessRuleException;
 import com.centroartesmusicales.backend.exception.ResourceNotFoundException;
 import com.centroartesmusicales.backend.model.Alumno;
@@ -29,16 +28,23 @@ public class AlumnoService {
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
 
+    /**
+     * Común a la creación pública (registro con correo real) y la del admin (usuario/contraseña
+     * asignados a mano) — cada controlador valida su propio DTO y pasa los campos ya extraídos,
+     * para que las reglas de formato de "email" puedan diferir entre ambos casos sin duplicar
+     * aquí la lógica de alta.
+     */
     @Transactional
-    public Alumno crear(CrearAlumnoRequest request) {
-        if (usuarioRepository.existsByEmail(request.email())) {
-            throw new BusinessRuleException("Ya existe un usuario con ese correo");
+    public Alumno crear(String email, String password, String nombre, String telefono,
+                         LocalDate fechaNacimiento, LocalDate fechaPrimeraClase) {
+        if (usuarioRepository.existsByEmail(email)) {
+            throw new BusinessRuleException("Ya existe un usuario con ese correo o nombre de usuario");
         }
 
         Usuario usuario = Usuario.builder()
-                .email(request.email())
-                .password(passwordEncoder.encode(request.password()))
-                .nombre(request.nombre())
+                .email(email)
+                .password(passwordEncoder.encode(password))
+                .nombre(nombre)
                 .role(Role.ALUMNO)
                 .enabled(true)
                 .build();
@@ -46,10 +52,10 @@ public class AlumnoService {
 
         Alumno alumno = Alumno.builder()
                 .usuario(usuario)
-                .telefono(request.telefono())
-                .fechaNacimiento(request.fechaNacimiento())
+                .telefono(telefono)
+                .fechaNacimiento(fechaNacimiento)
                 .fechaInscripcion(LocalDate.now())
-                .fechaPrimeraClase(request.fechaPrimeraClase())
+                .fechaPrimeraClase(fechaPrimeraClase)
                 .activo(true)
                 .build();
 
@@ -93,8 +99,28 @@ public class AlumnoService {
     public Alumno actualizar(Long id, ActualizarAlumnoRequest request) {
         Alumno alumno = obtenerPorId(id);
         aplicarCambiosComunes(alumno, request.nombre(), request.telefono(), request.fechaNacimiento());
-        if (request.googleDocsUrl() != null) {
-            alumno.setGoogleDocsUrl(request.googleDocsUrl());
+        if (request.email() != null && !request.email().isBlank()) {
+            String nuevoEmail = request.email().trim();
+            Usuario usuario = alumno.getUsuario();
+            if (!nuevoEmail.equals(usuario.getEmail())) {
+                if (usuarioRepository.existsByEmail(nuevoEmail)) {
+                    throw new BusinessRuleException("Ya existe un usuario con ese correo o nombre de usuario");
+                }
+                usuario.setEmail(nuevoEmail);
+                usuarioRepository.save(usuario);
+            }
+        }
+        if (request.googleDocsUrl1() != null) {
+            alumno.setGoogleDocsUrl1(request.googleDocsUrl1());
+        }
+        if (request.instrumentoBitacora1() != null) {
+            alumno.setInstrumentoBitacora1(request.instrumentoBitacora1());
+        }
+        if (request.googleDocsUrl2() != null) {
+            alumno.setGoogleDocsUrl2(request.googleDocsUrl2());
+        }
+        if (request.instrumentoBitacora2() != null) {
+            alumno.setInstrumentoBitacora2(request.instrumentoBitacora2());
         }
         if (request.activo() != null) {
             alumno.setActivo(request.activo());
@@ -148,9 +174,5 @@ public class AlumnoService {
         Alumno alumno = obtenerPorId(id);
         alumno.getUsuario().setPassword(passwordEncoder.encode(nuevaPassword));
         usuarioRepository.save(alumno.getUsuario());
-    }
-
-    public String obtenerBitacora(Long alumnoId) {
-        return obtenerPorId(alumnoId).getGoogleDocsUrl();
     }
 }

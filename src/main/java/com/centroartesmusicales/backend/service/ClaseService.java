@@ -85,10 +85,17 @@ public class ClaseService {
         YearMonth mes = periodo != null ? periodo : YearMonth.now(zoneId());
         LocalDateTime inicio = mes.atDay(1).atStartOfDay();
         LocalDateTime fin = mes.plusMonths(1).atDay(1).atStartOfDay();
+        LocalDateTime ahora = LocalDateTime.now(zoneId());
 
-        long tomadas = claseRepository.countOcupadasEnRango(alumnoId, ESTADOS_OCUPAN_CUPO, inicio, fin, null);
+        // "Ocupadas" (para el cupo disponible) cuenta también las clases futuras ya agendadas —
+        // esas sí deben bloquear el cupo. "Tomadas" es solo lo que ya pasó: una PROGRAMADA en el
+        // futuro (p.ej. del ciclo generado de una vez) todavía no fue tomada.
+        long ocupadas = claseRepository.countOcupadasEnRango(alumnoId, ESTADOS_OCUPAN_CUPO, inicio, fin, null);
+        LocalDateTime finTomadas = ahora.isBefore(fin) ? ahora : fin;
+        long tomadas = claseRepository.countOcupadasEnRango(alumnoId, ESTADOS_OCUPAN_CUPO, inicio, finTomadas, null);
+
         int limite = appProperties.clases().limiteMensual();
-        int disponibles = (int) Math.max(0, limite - tomadas);
+        int disponibles = (int) Math.max(0, limite - ocupadas);
         return new ResumenMesResponse(mes.toString(), (int) tomadas, limite, disponibles);
     }
 

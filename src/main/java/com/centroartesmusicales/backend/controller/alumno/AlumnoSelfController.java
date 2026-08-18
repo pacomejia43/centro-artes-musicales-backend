@@ -42,6 +42,7 @@ public class AlumnoSelfController {
     @GetMapping("/bitacora")
     public ResponseEntity<BitacoraResponse> bitacora(@AuthenticationPrincipal SecurityUser securityUser) {
         var alumno = alumnoService.obtenerPorUsuarioId(securityUser.getId());
-        return ResponseEntity.ok(new BitacoraResponse(alumno.getGoogleDocsUrl()));
+        return ResponseEntity.ok(new BitacoraResponse(alumno.getGoogleDocsUrl1(), alumno.getInstrumentoBitacora1(),
+                alumno.getGoogleDocsUrl2(), alumno.getInstrumentoBitacora2()));
     }
 }

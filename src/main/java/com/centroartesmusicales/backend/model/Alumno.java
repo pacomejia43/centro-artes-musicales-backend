@@ -2,6 +2,8 @@ package com.centroartesmusicales.backend.model;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -51,8 +53,19 @@ public class Alumno extends Auditable {
     /** Fecha de la primera clase del ciclo vigente (ver util.CicloClases) — la captura el admin. */
     private LocalDate fechaPrimeraClase;
 
-    @Column(name = "google_docs_url", length = 500)
-    private String googleDocsUrl;
+    @Column(name = "google_docs_url_1", length = 500)
+    private String googleDocsUrl1;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "instrumento_bitacora_1", length = 40)
+    private Instrumento instrumentoBitacora1;
+
+    @Column(name = "google_docs_url_2", length = 500)
+    private String googleDocsUrl2;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "instrumento_bitacora_2", length = 40)
+    private Instrumento instrumentoBitacora2;
 
     @Column(nullable = false)
     @Builder.Default

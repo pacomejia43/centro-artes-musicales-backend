@@ -3,7 +3,7 @@ package com.centroartesmusicales.backend.controller.admin;
 import com.centroartesmusicales.backend.dto.alumno.ActualizarAlumnoRequest;
 import com.centroartesmusicales.backend.dto.alumno.AlumnoResponse;
 import com.centroartesmusicales.backend.dto.alumno.BitacoraResponse;
-import com.centroartesmusicales.backend.dto.alumno.CrearAlumnoRequest;
+import com.centroartesmusicales.backend.dto.alumno.CrearAlumnoAdminRequest;
 import com.centroartesmusicales.backend.dto.alumno.ResetPasswordRequest;
 import com.centroartesmusicales.backend.dto.clase.ResumenMesResponse;
 import com.centroartesmusicales.backend.mapper.AlumnoMapper;
@@ -39,8 +39,9 @@ public class AlumnoAdminController {
     private final PagoService pagoService;
 
     @PostMapping
-    public ResponseEntity<AlumnoResponse> crear(@Valid @RequestBody CrearAlumnoRequest request) {
-        var alumno = alumnoService.crear(request);
+    public ResponseEntity<AlumnoResponse> crear(@Valid @RequestBody CrearAlumnoAdminRequest request) {
+        var alumno = alumnoService.crear(request.email(), request.password(), request.nombre(),
+                request.telefono(), request.fechaNacimiento(), request.fechaPrimeraClase());
         asegurarCargoDeCiclo(alumno);
         return ResponseEntity.status(HttpStatus.CREATED).body(AlumnoMapper.toResponse(alumno));
     }
@@ -87,7 +88,9 @@ public class AlumnoAdminController {
 
     @GetMapping("/{id}/bitacora")
     public ResponseEntity<BitacoraResponse> bitacora(@PathVariable Long id) {
-        return ResponseEntity.ok(new BitacoraResponse(alumnoService.obtenerBitacora(id)));
+        Alumno alumno = alumnoService.obtenerPorId(id);
+        return ResponseEntity.ok(new BitacoraResponse(alumno.getGoogleDocsUrl1(), alumno.getInstrumentoBitacora1(),
+                alumno.getGoogleDocsUrl2(), alumno.getInstrumentoBitacora2()));
     }
 
     @GetMapping("/{id}/resumen-mes")

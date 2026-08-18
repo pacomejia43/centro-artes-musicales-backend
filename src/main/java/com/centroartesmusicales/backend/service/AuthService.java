@@ -30,7 +30,8 @@ public class AuthService {
 
     @Transactional
     public AuthResponse registro(CrearAlumnoRequest request) {
-        Alumno alumno = alumnoService.crear(request);
+        Alumno alumno = alumnoService.crear(request.email(), request.password(), request.nombre(),
+                request.telefono(), request.fechaNacimiento(), null);
         Usuario usuario = alumno.getUsuario();
         String token = jwtService.generateToken(new SecurityUser(usuario));
         return new AuthResponse(token, usuario.getId(), usuario.getNombre(), usuario.getEmail(), usuario.getRole());
