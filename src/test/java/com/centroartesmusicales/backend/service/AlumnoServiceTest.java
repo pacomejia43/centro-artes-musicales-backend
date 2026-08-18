@@ -1,6 +1,7 @@
 package com.centroartesmusicales.backend.service;
 
 import com.centroartesmusicales.backend.config.AppProperties;
+import com.centroartesmusicales.backend.dto.alumno.ActualizarAlumnoRequest;
 import com.centroartesmusicales.backend.dto.alumno.CupoInstrumentoRequest;
 import com.centroartesmusicales.backend.exception.BusinessRuleException;
 import com.centroartesmusicales.backend.exception.ResourceNotFoundException;
@@ -117,6 +118,47 @@ class AlumnoServiceTest {
         verify(usuarioRepository, never()).deleteById(any());
         verifyNoInteractions(claseRepository, pagoRepository, pagoTransaccionRepository,
                 solicitudReagendacionRepository, cupoRepository);
+    }
+
+    // ---------------------------------------------------------------- actualizar
+
+    /**
+     * fechaInscripcion es solo un dato administrativo; fechaPrimeraClase dispara el cálculo del
+     * ciclo de 4 clases y el próximo pago (ver CicloClases). Son independientes a propósito —
+     * editar una nunca debe alterar la otra.
+     */
+    @Test
+    void actualizar_cambiaFechaInscripcionSinTocarFechaPrimeraClase() {
+        LocalDate fechaPrimeraClaseOriginal = LocalDate.of(2026, 1, 5);
+        alumno.setFechaPrimeraClase(fechaPrimeraClaseOriginal);
+        when(alumnoRepository.findById(10L)).thenReturn(Optional.of(alumno));
+        when(alumnoRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        LocalDate nuevaFechaInscripcion = LocalDate.of(2024, 8, 20);
+        var request = new ActualizarAlumnoRequest(null, null, null, null, null, null, null, null, null,
+                nuevaFechaInscripcion, null, null);
+
+        var resultado = alumnoService.actualizar(10L, request);
+
+        assertThat(resultado.getFechaInscripcion()).isEqualTo(nuevaFechaInscripcion);
+        assertThat(resultado.getFechaPrimeraClase()).isEqualTo(fechaPrimeraClaseOriginal);
+    }
+
+    @Test
+    void actualizar_cambiaFechaPrimeraClaseSinTocarFechaInscripcion() {
+        LocalDate fechaInscripcionOriginal = LocalDate.of(2020, 3, 15);
+        alumno.setFechaInscripcion(fechaInscripcionOriginal);
+        when(alumnoRepository.findById(10L)).thenReturn(Optional.of(alumno));
+        when(alumnoRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        LocalDate nuevaFechaPrimeraClase = LocalDate.of(2026, 2, 10);
+        var request = new ActualizarAlumnoRequest(null, null, null, null, null, null, null, null, null,
+                null, nuevaFechaPrimeraClase, null);
+
+        var resultado = alumnoService.actualizar(10L, request);
+
+        assertThat(resultado.getFechaPrimeraClase()).isEqualTo(nuevaFechaPrimeraClase);
+        assertThat(resultado.getFechaInscripcion()).isEqualTo(fechaInscripcionOriginal);
     }
 
     // ---------------------------------------------------------------- actualizarCupos

@@ -18,6 +18,8 @@ public record ActualizarAlumnoRequest(
         String googleDocsUrl2,
         Instrumento instrumentoBitacora2,
         Boolean activo,
+        /** Independiente de fechaPrimeraClase: son fechas distintas y una nunca deriva ni modifica la otra. */
+        LocalDate fechaInscripcion,
         LocalDate fechaPrimeraClase,
         /** Precio mensual particular de este alumno; si se omite, no se modifica el ya guardado. */
         @Positive BigDecimal precioMensual

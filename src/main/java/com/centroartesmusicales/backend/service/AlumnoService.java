@@ -145,6 +145,9 @@ public class AlumnoService {
         if (request.activo() != null) {
             alumno.setActivo(request.activo());
         }
+        if (request.fechaInscripcion() != null) {
+            alumno.setFechaInscripcion(request.fechaInscripcion());
+        }
         if (request.fechaPrimeraClase() != null) {
             alumno.setFechaPrimeraClase(request.fechaPrimeraClase());
         }
