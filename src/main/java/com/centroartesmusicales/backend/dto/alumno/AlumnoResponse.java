@@ -1,5 +1,6 @@
 package com.centroartesmusicales.backend.dto.alumno;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -14,6 +15,7 @@ public record AlumnoResponse(
         boolean activo,
         LocalDate fechaPrimeraClase,
         List<LocalDate> fechasCicloClases,
-        LocalDate proximoPago
+        LocalDate proximoPago,
+        BigDecimal precioMensual
 ) {
 }

@@ -1,0 +1,1 @@
+ALTER TABLE alumno ADD COLUMN precio_mensual DECIMAL(10,2) NULL;

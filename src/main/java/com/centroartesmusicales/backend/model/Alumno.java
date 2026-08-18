@@ -18,6 +18,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
@@ -52,6 +53,11 @@ public class Alumno extends Auditable {
 
     /** Fecha de la primera clase del ciclo vigente (ver util.CicloClases) — la captura el admin. */
     private LocalDate fechaPrimeraClase;
+
+    /** Precio mensual particular de este alumno (algunos pagan distinto). Si es NULL, se usa
+     *  app.pagos.monto-mensual-default — ver PagoService. */
+    @Column(name = "precio_mensual", precision = 10, scale = 2)
+    private BigDecimal precioMensual;
 
     @Column(name = "google_docs_url_1", length = 500)
     private String googleDocsUrl1;

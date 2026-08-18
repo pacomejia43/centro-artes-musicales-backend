@@ -90,7 +90,7 @@ public class PagoService {
     public Pago crearCargo(Long alumnoId, CrearPagoRequest request) {
         Alumno alumno = alumnoService.obtenerPorId(alumnoId);
         YearMonth periodo = request.periodo() != null ? request.periodo() : YearMonth.now(zoneId());
-        BigDecimal monto = request.monto() != null ? request.monto() : appProperties.pagos().montoMensualDefault();
+        BigDecimal monto = request.monto() != null ? request.monto() : montoMensual(alumno);
 
         if (pagoRepository.existsByAlumno_IdAndPeriodo(alumnoId, periodo)) {
             throw new BusinessRuleException("Ya existe un cargo registrado para el alumno en el período " + periodo);
@@ -126,13 +126,18 @@ public class PagoService {
         Alumno alumno = alumnoService.obtenerPorId(alumnoId);
         Pago pago = Pago.builder()
                 .alumno(alumno)
-                .monto(appProperties.pagos().montoMensualDefault())
+                .monto(montoMensual(alumno))
                 .periodo(periodo)
                 .fechaLimite(fechaLimite)
                 .notas("Generado automáticamente: ciclo de 4 clases desde " + fechaPrimeraClase)
                 .estado(EstadoPago.PENDIENTE)
                 .build();
         return Optional.of(pagoRepository.save(pago));
+    }
+
+    /** Precio particular del alumno si el admin se lo asignó; si no, el default global. */
+    private BigDecimal montoMensual(Alumno alumno) {
+        return alumno.getPrecioMensual() != null ? alumno.getPrecioMensual() : appProperties.pagos().montoMensualDefault();
     }
 
     /** Admin-entered payments are auto-confirmed — the admin action IS the confirmation. */

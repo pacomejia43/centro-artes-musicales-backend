@@ -2,6 +2,7 @@ package com.centroartesmusicales.backend.repository;
 
 import com.centroartesmusicales.backend.model.Clase;
 import com.centroartesmusicales.backend.model.EstadoClase;
+import com.centroartesmusicales.backend.model.Instrumento;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -21,6 +22,16 @@ public interface ClaseRepository extends JpaRepository<Clase, Long> {
                                @Param("inicio") LocalDateTime inicio,
                                @Param("fin") LocalDateTime fin,
                                @Param("excludeId") Long excludeId);
+
+    @Query("SELECT COUNT(c) FROM Clase c WHERE c.alumno.id = :alumnoId AND c.instrumento = :instrumento "
+            + "AND c.estado IN :estados AND c.fechaHora >= :inicio AND c.fechaHora < :fin "
+            + "AND (:excludeId IS NULL OR c.id <> :excludeId)")
+    long countOcupadasEnRangoPorInstrumento(@Param("alumnoId") Long alumnoId,
+                                             @Param("instrumento") Instrumento instrumento,
+                                             @Param("estados") List<EstadoClase> estados,
+                                             @Param("inicio") LocalDateTime inicio,
+                                             @Param("fin") LocalDateTime fin,
+                                             @Param("excludeId") Long excludeId);
 
     /**
      * Coarse same-day candidates for either the target profesor or the target alumno, in an

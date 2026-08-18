@@ -30,7 +30,8 @@ public final class AlumnoMapper {
                 alumno.isActivo(),
                 fechaPrimeraClase,
                 fechasCicloClases,
-                fechaPrimeraClase != null ? CicloClases.proximoPago(fechaPrimeraClase) : null
+                fechaPrimeraClase != null ? CicloClases.proximoPago(fechaPrimeraClase) : null,
+                alumno.getPrecioMensual()
         );
     }
 }

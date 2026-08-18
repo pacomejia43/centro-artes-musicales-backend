@@ -12,12 +12,14 @@ import com.centroartesmusicales.backend.exception.LimiteMensualExcedidoException
 import com.centroartesmusicales.backend.exception.PlazoReagendacionExpiradoException;
 import com.centroartesmusicales.backend.exception.ResourceNotFoundException;
 import com.centroartesmusicales.backend.model.Alumno;
+import com.centroartesmusicales.backend.model.AlumnoInstrumentoCupo;
 import com.centroartesmusicales.backend.model.Clase;
 import com.centroartesmusicales.backend.model.EstadoClase;
 import com.centroartesmusicales.backend.model.EstadoSolicitud;
 import com.centroartesmusicales.backend.model.Instrumento;
 import com.centroartesmusicales.backend.model.Profesor;
 import com.centroartesmusicales.backend.model.SolicitudReagendacion;
+import com.centroartesmusicales.backend.repository.AlumnoInstrumentoCupoRepository;
 import com.centroartesmusicales.backend.repository.ClaseRepository;
 import com.centroartesmusicales.backend.repository.SolicitudReagendacionRepository;
 import com.centroartesmusicales.backend.repository.UsuarioRepository;
@@ -48,6 +50,7 @@ public class ClaseService {
     private final UsuarioRepository usuarioRepository;
     private final AlumnoService alumnoService;
     private final ProfesorService profesorService;
+    private final AlumnoInstrumentoCupoRepository cupoRepository;
     private final AppProperties appProperties;
 
     private ZoneId zoneId() {
@@ -92,11 +95,29 @@ public class ClaseService {
         // dos cifras siempre deben sumar el límite (el cupo real ya lo bloquea verificarCupoMensual,
         // que sí cuenta también las futuras; esto es solo para mostrarle el avance al alumno/admin).
         LocalDateTime finTomadas = ahora.isBefore(fin) ? ahora : fin;
-        long tomadas = claseRepository.countOcupadasEnRango(alumnoId, ESTADOS_OCUPAN_CUPO, inicio, finTomadas, null);
 
-        int limite = appProperties.clases().limiteMensual();
-        int disponibles = (int) Math.max(0, limite - tomadas);
-        return new ResumenMesResponse(mes.toString(), (int) tomadas, limite, disponibles);
+        List<AlumnoInstrumentoCupo> cupos = cupoRepository.findByAlumno_IdOrderByInstrumento(alumnoId);
+        if (cupos.isEmpty()) {
+            long tomadas = claseRepository.countOcupadasEnRango(alumnoId, ESTADOS_OCUPAN_CUPO, inicio, finTomadas, null);
+            int limite = appProperties.clases().limiteMensual();
+            int disponibles = (int) Math.max(0, limite - tomadas);
+            return new ResumenMesResponse(mes.toString(), (int) tomadas, limite, disponibles, List.of());
+        }
+
+        List<ResumenMesResponse.ResumenInstrumentoItem> porInstrumento = new ArrayList<>();
+        int totalTomadas = 0;
+        int totalLimite = 0;
+        for (AlumnoInstrumentoCupo cupo : cupos) {
+            long tomadasInstrumento = claseRepository.countOcupadasEnRangoPorInstrumento(
+                    alumnoId, cupo.getInstrumento(), ESTADOS_OCUPAN_CUPO, inicio, finTomadas, null);
+            int disponiblesInstrumento = (int) Math.max(0, cupo.getCupoMensual() - tomadasInstrumento);
+            porInstrumento.add(new ResumenMesResponse.ResumenInstrumentoItem(
+                    cupo.getInstrumento(), (int) tomadasInstrumento, cupo.getCupoMensual(), disponiblesInstrumento));
+            totalTomadas += tomadasInstrumento;
+            totalLimite += cupo.getCupoMensual();
+        }
+        int totalDisponibles = Math.max(0, totalLimite - totalTomadas);
+        return new ResumenMesResponse(mes.toString(), totalTomadas, totalLimite, totalDisponibles, porInstrumento);
     }
 
     public ResumenMesResponse resumenMesPropio(Long usuarioId, YearMonth periodo) {
@@ -318,7 +339,7 @@ public class ClaseService {
                                      LocalDateTime fechaHora, int duracionMinutos, Clase claseOriginal) {
         Long excludeId = claseOriginal != null ? claseOriginal.getId() : null;
         verificarDisponibilidad(profesor.getId(), alumno.getId(), fechaHora, duracionMinutos, excludeId);
-        verificarCupoMensual(alumno.getId(), fechaHora, excludeId);
+        verificarCupoMensual(alumno.getId(), instrumento, fechaHora, excludeId);
 
         Clase clase = Clase.builder()
                 .alumno(alumno)
@@ -354,15 +375,38 @@ public class ClaseService {
         }
     }
 
-    private void verificarCupoMensual(Long alumnoId, LocalDateTime fechaHora, Long excludeClaseId) {
+    /**
+     * Si el alumno tiene cupos particulares por instrumento configurados (AlumnoInstrumentoCupo),
+     * valida solo contra el cupo de ESE instrumento (y exige que exista un cupo configurado para
+     * él). Si no tiene ninguno configurado, cae al límite mensual global de siempre, contando
+     * todos los instrumentos juntos — sin cambio de comportamiento para la mayoría de los alumnos.
+     */
+    private void verificarCupoMensual(Long alumnoId, Instrumento instrumento, LocalDateTime fechaHora, Long excludeClaseId) {
         LocalDateTime inicioMes = fechaHora.toLocalDate().withDayOfMonth(1).atStartOfDay();
         LocalDateTime finMes = inicioMes.plusMonths(1);
 
-        long ocupadas = claseRepository.countOcupadasEnRango(alumnoId, ESTADOS_OCUPAN_CUPO, inicioMes, finMes, excludeClaseId);
-        int limite = appProperties.clases().limiteMensual();
-        if (ocupadas >= limite) {
+        List<AlumnoInstrumentoCupo> cupos = cupoRepository.findByAlumno_IdOrderByInstrumento(alumnoId);
+        if (cupos.isEmpty()) {
+            long ocupadas = claseRepository.countOcupadasEnRango(alumnoId, ESTADOS_OCUPAN_CUPO, inicioMes, finMes, excludeClaseId);
+            int limite = appProperties.clases().limiteMensual();
+            if (ocupadas >= limite) {
+                throw new LimiteMensualExcedidoException(
+                        "El alumno ya alcanzó el límite de " + limite + " clases para este mes");
+            }
+            return;
+        }
+
+        AlumnoInstrumentoCupo cupo = cupos.stream()
+                .filter(c -> c.getInstrumento() == instrumento)
+                .findFirst()
+                .orElseThrow(() -> new LimiteMensualExcedidoException(
+                        "El alumno no tiene cupo configurado para " + instrumento));
+        long ocupadasInstrumento = claseRepository.countOcupadasEnRangoPorInstrumento(
+                alumnoId, instrumento, ESTADOS_OCUPAN_CUPO, inicioMes, finMes, excludeClaseId);
+        if (ocupadasInstrumento >= cupo.getCupoMensual()) {
             throw new LimiteMensualExcedidoException(
-                    "El alumno ya alcanzó el límite de " + limite + " clases para este mes");
+                    "El alumno ya alcanzó su límite de " + cupo.getCupoMensual() + " clases de "
+                            + instrumento + " para este mes");
         }
     }
 }

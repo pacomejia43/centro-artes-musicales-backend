@@ -1,9 +1,12 @@
 package com.centroartesmusicales.backend.controller.admin;
 
 import com.centroartesmusicales.backend.dto.alumno.ActualizarAlumnoRequest;
+import com.centroartesmusicales.backend.dto.alumno.ActualizarCuposRequest;
 import com.centroartesmusicales.backend.dto.alumno.AlumnoResponse;
 import com.centroartesmusicales.backend.dto.alumno.BitacoraResponse;
 import com.centroartesmusicales.backend.dto.alumno.CrearAlumnoAdminRequest;
+import com.centroartesmusicales.backend.dto.alumno.CupoInstrumentoResponse;
+import com.centroartesmusicales.backend.dto.alumno.PasswordVisibleResponse;
 import com.centroartesmusicales.backend.dto.alumno.ResetPasswordRequest;
 import com.centroartesmusicales.backend.dto.clase.ResumenMesResponse;
 import com.centroartesmusicales.backend.mapper.AlumnoMapper;
@@ -43,7 +46,7 @@ public class AlumnoAdminController {
     @PostMapping
     public ResponseEntity<AlumnoResponse> crear(@Valid @RequestBody CrearAlumnoAdminRequest request) {
         var alumno = alumnoService.crear(request.email(), request.password(), request.nombre(),
-                request.telefono(), request.fechaNacimiento(), request.fechaPrimeraClase());
+                request.telefono(), request.fechaNacimiento(), request.fechaPrimeraClase(), request.precioMensual());
         asegurarCargoDeCiclo(alumno);
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(alumno));
     }
@@ -96,6 +99,11 @@ public class AlumnoAdminController {
         return ResponseEntity.noContent().build();
     }
 
+    @GetMapping("/{id}/password")
+    public ResponseEntity<PasswordVisibleResponse> verPassword(@PathVariable Long id) {
+        return ResponseEntity.ok(new PasswordVisibleResponse(alumnoService.obtenerPasswordVisible(id)));
+    }
+
     @GetMapping("/{id}/bitacora")
     public ResponseEntity<BitacoraResponse> bitacora(@PathVariable Long id) {
         Alumno alumno = alumnoService.obtenerPorId(id);
@@ -107,5 +115,22 @@ public class AlumnoAdminController {
     public ResponseEntity<ResumenMesResponse> resumenMes(@PathVariable Long id,
                                                           @RequestParam(required = false) YearMonth periodo) {
         return ResponseEntity.ok(claseService.resumenMes(id, periodo));
+    }
+
+    @GetMapping("/{id}/cupos")
+    public ResponseEntity<List<CupoInstrumentoResponse>> obtenerCupos(@PathVariable Long id) {
+        var cupos = alumnoService.obtenerCupos(id).stream()
+                .map(c -> new CupoInstrumentoResponse(c.getInstrumento(), c.getCupoMensual()))
+                .toList();
+        return ResponseEntity.ok(cupos);
+    }
+
+    @PutMapping("/{id}/cupos")
+    public ResponseEntity<List<CupoInstrumentoResponse>> actualizarCupos(@PathVariable Long id,
+                                                                          @Valid @RequestBody ActualizarCuposRequest request) {
+        var cupos = alumnoService.actualizarCupos(id, request.cupos()).stream()
+                .map(c -> new CupoInstrumentoResponse(c.getInstrumento(), c.getCupoMensual()))
+                .toList();
+        return ResponseEntity.ok(cupos);
     }
 }

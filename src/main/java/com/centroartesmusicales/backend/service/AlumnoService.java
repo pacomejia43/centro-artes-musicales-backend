@@ -2,13 +2,18 @@ package com.centroartesmusicales.backend.service;
 
 import com.centroartesmusicales.backend.dto.alumno.ActualizarAlumnoRequest;
 import com.centroartesmusicales.backend.dto.alumno.ActualizarPerfilRequest;
+import com.centroartesmusicales.backend.dto.alumno.CupoInstrumentoRequest;
 import com.centroartesmusicales.backend.exception.BusinessRuleException;
 import com.centroartesmusicales.backend.exception.ResourceNotFoundException;
 import com.centroartesmusicales.backend.model.Alumno;
+import com.centroartesmusicales.backend.model.AlumnoInstrumentoCupo;
+import com.centroartesmusicales.backend.model.Instrumento;
 import com.centroartesmusicales.backend.model.Role;
 import com.centroartesmusicales.backend.model.Usuario;
+import com.centroartesmusicales.backend.repository.AlumnoInstrumentoCupoRepository;
 import com.centroartesmusicales.backend.repository.AlumnoRepository;
 import com.centroartesmusicales.backend.repository.UsuarioRepository;
+import com.centroartesmusicales.backend.security.PasswordCipherService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -18,7 +23,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -26,7 +35,9 @@ public class AlumnoService {
 
     private final AlumnoRepository alumnoRepository;
     private final UsuarioRepository usuarioRepository;
+    private final AlumnoInstrumentoCupoRepository cupoRepository;
     private final PasswordEncoder passwordEncoder;
+    private final PasswordCipherService passwordCipherService;
 
     /**
      * Común a la creación pública (registro con correo real) y la del admin (usuario/contraseña
@@ -36,7 +47,7 @@ public class AlumnoService {
      */
     @Transactional
     public Alumno crear(String email, String password, String nombre, String telefono,
-                         LocalDate fechaNacimiento, LocalDate fechaPrimeraClase) {
+                         LocalDate fechaNacimiento, LocalDate fechaPrimeraClase, BigDecimal precioMensual) {
         if (usuarioRepository.existsByEmail(email)) {
             throw new BusinessRuleException("Ya existe un usuario con ese correo o nombre de usuario");
         }
@@ -44,6 +55,7 @@ public class AlumnoService {
         Usuario usuario = Usuario.builder()
                 .email(email)
                 .password(passwordEncoder.encode(password))
+                .passwordVisible(passwordCipherService.encriptar(password))
                 .nombre(nombre)
                 .role(Role.ALUMNO)
                 .enabled(true)
@@ -56,6 +68,7 @@ public class AlumnoService {
                 .fechaNacimiento(fechaNacimiento)
                 .fechaInscripcion(LocalDate.now())
                 .fechaPrimeraClase(fechaPrimeraClase)
+                .precioMensual(precioMensual)
                 .activo(true)
                 .build();
 
@@ -128,6 +141,9 @@ public class AlumnoService {
         if (request.fechaPrimeraClase() != null) {
             alumno.setFechaPrimeraClase(request.fechaPrimeraClase());
         }
+        if (request.precioMensual() != null) {
+            alumno.setPrecioMensual(request.precioMensual());
+        }
         Alumno guardado = alumnoRepository.save(alumno);
         alumnoRepository.flush(); // Fuerza la escritura inmediata en la base de datos (ver desactivar())
         return guardado;
@@ -172,7 +188,49 @@ public class AlumnoService {
     @Transactional
     public void resetPassword(Long id, String nuevaPassword) {
         Alumno alumno = obtenerPorId(id);
-        alumno.getUsuario().setPassword(passwordEncoder.encode(nuevaPassword));
-        usuarioRepository.save(alumno.getUsuario());
+        Usuario usuario = alumno.getUsuario();
+        usuario.setPassword(passwordEncoder.encode(nuevaPassword));
+        usuario.setPasswordVisible(passwordCipherService.encriptar(nuevaPassword));
+        usuarioRepository.save(usuario);
+    }
+
+    /** Null si el alumno todavía no tiene ninguna contraseña capturada desde que existe esta función. */
+    public String obtenerPasswordVisible(Long id) {
+        Alumno alumno = obtenerPorId(id);
+        String cifrado = alumno.getUsuario().getPasswordVisible();
+        return cifrado != null ? passwordCipherService.desencriptar(cifrado) : null;
+    }
+
+    public List<AlumnoInstrumentoCupo> obtenerCupos(Long alumnoId) {
+        return cupoRepository.findByAlumno_IdOrderByInstrumento(alumnoId);
+    }
+
+    /**
+     * Reemplaza de un solo golpe todos los cupos por instrumento del alumno (ver
+     * AlumnoInstrumentoCupo) — una lista vacía los borra y el alumno vuelve a regirse por el
+     * límite mensual global (ClaseService#verificarCupoMensual).
+     */
+    @Transactional
+    public List<AlumnoInstrumentoCupo> actualizarCupos(Long alumnoId, List<CupoInstrumentoRequest> items) {
+        Alumno alumno = obtenerPorId(alumnoId);
+
+        Set<Instrumento> vistos = new HashSet<>();
+        for (CupoInstrumentoRequest item : items) {
+            if (!vistos.add(item.instrumento())) {
+                throw new BusinessRuleException("El instrumento " + item.instrumento() + " está repetido");
+            }
+        }
+
+        cupoRepository.deleteByAlumno_Id(alumnoId);
+        cupoRepository.flush();
+
+        List<AlumnoInstrumentoCupo> nuevos = items.stream()
+                .map(item -> AlumnoInstrumentoCupo.builder()
+                        .alumno(alumno)
+                        .instrumento(item.instrumento())
+                        .cupoMensual(item.cupoMensual())
+                        .build())
+                .toList();
+        return cupoRepository.saveAll(nuevos);
     }
 }

@@ -2,8 +2,10 @@ package com.centroartesmusicales.backend.dto.alumno;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Past;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
@@ -17,6 +19,8 @@ public record CrearAlumnoAdminRequest(
         @NotBlank String nombre,
         String telefono,
         @Past LocalDate fechaNacimiento,
-        LocalDate fechaPrimeraClase
+        LocalDate fechaPrimeraClase,
+        /** Precio mensual particular; si se omite, se usa app.pagos.monto-mensual-default. */
+        @Positive BigDecimal precioMensual
 ) {
 }
