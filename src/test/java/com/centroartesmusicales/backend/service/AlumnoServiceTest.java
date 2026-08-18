@@ -1,7 +1,11 @@
 package com.centroartesmusicales.backend.service;
 
+import com.centroartesmusicales.backend.config.AppProperties;
+import com.centroartesmusicales.backend.dto.alumno.CupoInstrumentoRequest;
+import com.centroartesmusicales.backend.exception.BusinessRuleException;
 import com.centroartesmusicales.backend.exception.ResourceNotFoundException;
 import com.centroartesmusicales.backend.model.Alumno;
+import com.centroartesmusicales.backend.model.Instrumento;
 import com.centroartesmusicales.backend.model.Role;
 import com.centroartesmusicales.backend.model.Usuario;
 import com.centroartesmusicales.backend.repository.AlumnoInstrumentoCupoRepository;
@@ -19,9 +23,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
@@ -55,8 +62,18 @@ class AlumnoServiceTest {
 
     @BeforeEach
     void setUp() {
+        AppProperties appProperties = new AppProperties(
+                new AppProperties.Jwt("unit-test-secret-unit-test-secret-32b", 3_600_000L),
+                new AppProperties.Cors(List.of("http://localhost:3000")),
+                new AppProperties.Admin(new AppProperties.Admin.Bootstrap("", "", "Administrador")),
+                "America/Mexico_City",
+                new AppProperties.Clases(4, 4, 60),
+                new AppProperties.Pagos(new BigDecimal("600.00"))
+        );
+
         alumnoService = new AlumnoService(alumnoRepository, usuarioRepository, cupoRepository, claseRepository,
-                pagoRepository, pagoTransaccionRepository, solicitudReagendacionRepository, passwordEncoder);
+                pagoRepository, pagoTransaccionRepository, solicitudReagendacionRepository, passwordEncoder,
+                appProperties);
 
         Usuario usuario = Usuario.builder().id(1L).email("alexandra1").nombre("Alexandra")
                 .password("hash").role(Role.ALUMNO).enabled(true).build();
@@ -100,5 +117,59 @@ class AlumnoServiceTest {
         verify(usuarioRepository, never()).deleteById(any());
         verifyNoInteractions(claseRepository, pagoRepository, pagoTransaccionRepository,
                 solicitudReagendacionRepository, cupoRepository);
+    }
+
+    // ---------------------------------------------------------------- actualizarCupos
+
+    @Test
+    void actualizarCupos_permiteVariosInstrumentosSiSumanElLimiteMensual() {
+        when(alumnoRepository.findById(10L)).thenReturn(Optional.of(alumno));
+        when(cupoRepository.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var items = List.of(
+                new CupoInstrumentoRequest(Instrumento.PIANO, 2),
+                new CupoInstrumentoRequest(Instrumento.CANTO, 2)
+        );
+
+        var resultado = alumnoService.actualizarCupos(10L, items);
+
+        assertThat(resultado).hasSize(2);
+        verify(cupoRepository).deleteByAlumno_Id(10L);
+    }
+
+    @Test
+    void actualizarCupos_fallaSiLaSumaNoLlegaAlLimiteMensual() {
+        when(alumnoRepository.findById(10L)).thenReturn(Optional.of(alumno));
+
+        var items = List.of(new CupoInstrumentoRequest(Instrumento.PIANO, 2));
+
+        assertThatThrownBy(() -> alumnoService.actualizarCupos(10L, items))
+                .isInstanceOf(BusinessRuleException.class);
+        verify(cupoRepository, never()).deleteByAlumno_Id(any());
+    }
+
+    @Test
+    void actualizarCupos_fallaSiLaSumaExcedeElLimiteMensual() {
+        when(alumnoRepository.findById(10L)).thenReturn(Optional.of(alumno));
+
+        var items = List.of(
+                new CupoInstrumentoRequest(Instrumento.PIANO, 3),
+                new CupoInstrumentoRequest(Instrumento.CANTO, 3)
+        );
+
+        assertThatThrownBy(() -> alumnoService.actualizarCupos(10L, items))
+                .isInstanceOf(BusinessRuleException.class);
+        verify(cupoRepository, never()).deleteByAlumno_Id(any());
+    }
+
+    @Test
+    void actualizarCupos_permiteListaVaciaParaVolverAlLimiteGlobal() {
+        when(alumnoRepository.findById(10L)).thenReturn(Optional.of(alumno));
+        when(cupoRepository.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var resultado = alumnoService.actualizarCupos(10L, List.of());
+
+        assertThat(resultado).isEmpty();
+        verify(cupoRepository).deleteByAlumno_Id(10L);
     }
 }

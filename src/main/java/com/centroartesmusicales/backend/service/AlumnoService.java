@@ -1,5 +1,6 @@
 package com.centroartesmusicales.backend.service;
 
+import com.centroartesmusicales.backend.config.AppProperties;
 import com.centroartesmusicales.backend.dto.alumno.ActualizarAlumnoRequest;
 import com.centroartesmusicales.backend.dto.alumno.ActualizarPerfilRequest;
 import com.centroartesmusicales.backend.dto.alumno.CupoInstrumentoRequest;
@@ -44,6 +45,7 @@ public class AlumnoService {
     private final PagoTransaccionRepository pagoTransaccionRepository;
     private final SolicitudReagendacionRepository solicitudReagendacionRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AppProperties appProperties;
 
     /**
      * Común a la creación pública (registro con correo real) y la del admin (usuario/contraseña
@@ -226,7 +228,10 @@ public class AlumnoService {
     /**
      * Reemplaza de un solo golpe todos los cupos por instrumento del alumno (ver
      * AlumnoInstrumentoCupo) — una lista vacía los borra y el alumno vuelve a regirse por el
-     * límite mensual global (ClaseService#verificarCupoMensual).
+     * límite mensual global (ClaseService#verificarCupoMensual). Si se configuran cupos, deben
+     * repartir exactamente ese mismo límite entre instrumentos (ej. 2 de piano + 2 de canto),
+     * nunca sumar más ni menos — de lo contrario el alumno terminaría con más o menos clases
+     * disponibles al mes de las que realmente le tocan.
      */
     @Transactional
     public List<AlumnoInstrumentoCupo> actualizarCupos(Long alumnoId, List<CupoInstrumentoRequest> items) {
@@ -236,6 +241,15 @@ public class AlumnoService {
         for (CupoInstrumentoRequest item : items) {
             if (!vistos.add(item.instrumento())) {
                 throw new BusinessRuleException("El instrumento " + item.instrumento() + " está repetido");
+            }
+        }
+
+        if (!items.isEmpty()) {
+            int limiteMensual = appProperties.clases().limiteMensual();
+            int total = items.stream().mapToInt(CupoInstrumentoRequest::cupoMensual).sum();
+            if (total != limiteMensual) {
+                throw new BusinessRuleException("Los cupos por instrumento deben sumar exactamente "
+                        + limiteMensual + " clases al mes en total (suman " + total + ")");
             }
         }
 
