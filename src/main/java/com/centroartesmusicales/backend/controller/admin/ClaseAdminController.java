@@ -43,8 +43,8 @@ public class ClaseAdminController {
 
     @PostMapping("/ciclo")
     public ResponseEntity<List<ClaseResponse>> programarCiclo(@Valid @RequestBody ProgramarCicloClasesRequest request) {
-        var clases = claseService.programarCiclo(request.alumnoId(), request.profesorId(), request.instrumento(),
-                request.horaClase(), request.duracionMinutos(), request.notas());
+        var clases = claseService.programarCiclo(request.alumnoId(), request.asignaciones(),
+                request.duracionMinutos(), request.notas());
         return ResponseEntity.status(HttpStatus.CREATED).body(clases.stream().map(ClaseMapper::toResponse).toList());
     }
 

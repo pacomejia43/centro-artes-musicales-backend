@@ -1,6 +1,7 @@
 package com.centroartesmusicales.backend.service;
 
 import com.centroartesmusicales.backend.config.AppProperties;
+import com.centroartesmusicales.backend.dto.clase.AsignacionCicloItem;
 import com.centroartesmusicales.backend.dto.clase.ProgramarClaseRequest;
 import com.centroartesmusicales.backend.dto.clase.ReagendarRequest;
 import com.centroartesmusicales.backend.dto.clase.ResumenMesResponse;
@@ -32,7 +33,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -164,22 +164,42 @@ public class ClaseService {
 
     /**
      * Agenda de un solo golpe las 4 clases semanales del ciclo vigente (ver CicloClases), a partir
-     * de alumno.fechaPrimeraClase. Todo o nada: si cualquiera de las 4 choca con un horario
-     * ocupado o excede el cupo mensual, no se crea ninguna.
+     * de alumno.fechaPrimeraClase, repartidas entre "asignaciones" (instrumento/profesor/hora,
+     * cada una con su cantidad — ver AsignacionCicloItem). Todo o nada: si cualquiera de las 4
+     * choca con un horario ocupado o excede el cupo mensual (por instrumento, si el alumno tiene
+     * cupos configurados), no se crea ninguna.
      */
     @Transactional
-    public List<Clase> programarCiclo(Long alumnoId, Long profesorId, Instrumento instrumento,
-                                       LocalTime horaClase, Integer duracionMinutos, String notas) {
+    public List<Clase> programarCiclo(Long alumnoId, List<AsignacionCicloItem> asignaciones,
+                                       Integer duracionMinutos, String notas) {
         Alumno alumno = alumnoService.obtenerPorId(alumnoId);
         if (alumno.getFechaPrimeraClase() == null) {
             throw new BusinessRuleException("El alumno no tiene registrada su fecha de primera clase");
         }
-        Profesor profesor = profesorService.obtenerPorId(profesorId);
+
+        int totalSolicitado = asignaciones.stream().mapToInt(AsignacionCicloItem::cantidad).sum();
+        if (totalSolicitado != CicloClases.CLASES_POR_CICLO) {
+            throw new BusinessRuleException("Las cantidades de las asignaciones deben sumar exactamente "
+                    + CicloClases.CLASES_POR_CICLO + " clases (una por cada semana del ciclo), pero suman "
+                    + totalSolicitado);
+        }
+
+        List<AsignacionCicloItem> expandido = new ArrayList<>();
+        for (AsignacionCicloItem asignacion : asignaciones) {
+            for (int i = 0; i < asignacion.cantidad(); i++) {
+                expandido.add(asignacion);
+            }
+        }
+
         int duracion = duracionMinutos != null ? duracionMinutos : appProperties.clases().duracionDefaultMinutos();
+        List<LocalDate> fechas = CicloClases.fechasClases(alumno.getFechaPrimeraClase());
 
         List<Clase> creadas = new ArrayList<>();
-        for (LocalDate fecha : CicloClases.fechasClases(alumno.getFechaPrimeraClase())) {
-            Clase clase = crearClaseInterna(alumno, profesor, instrumento, fecha.atTime(horaClase), duracion, null);
+        for (int i = 0; i < fechas.size(); i++) {
+            AsignacionCicloItem asignacion = expandido.get(i);
+            Profesor profesor = profesorService.obtenerPorId(asignacion.profesorId());
+            Clase clase = crearClaseInterna(alumno, profesor, asignacion.instrumento(),
+                    fechas.get(i).atTime(asignacion.horaClase()), duracion, null);
             if (notas != null && !notas.isBlank()) {
                 clase.setNotas(notas);
                 clase = claseRepository.save(clase);
