@@ -137,6 +137,36 @@ class AlumnoServiceTest {
         verify(cupoRepository).deleteByAlumno_Id(10L);
     }
 
+    /**
+     * El admin puede intercalar instrumentos en renglones separados (ej. para que
+     * programarCiclo agende piano/canto/piano/canto en ese orden semanal) — deben sumarse en
+     * vez de rechazarse, ya que alumno_instrumento_cupo tiene una fila única por instrumento.
+     */
+    @Test
+    void actualizarCupos_sumaCantidadesCuandoElInstrumentoSeRepiteEnVariosRenglones() {
+        when(alumnoRepository.findById(10L)).thenReturn(Optional.of(alumno));
+        when(cupoRepository.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var items = List.of(
+                new CupoInstrumentoRequest(Instrumento.PIANO, 1),
+                new CupoInstrumentoRequest(Instrumento.CANTO, 1),
+                new CupoInstrumentoRequest(Instrumento.PIANO, 1),
+                new CupoInstrumentoRequest(Instrumento.CANTO, 1)
+        );
+
+        var resultado = alumnoService.actualizarCupos(10L, items);
+
+        assertThat(resultado).hasSize(2);
+        assertThat(resultado).anySatisfy(c -> {
+            assertThat(c.getInstrumento()).isEqualTo(Instrumento.PIANO);
+            assertThat(c.getCupoMensual()).isEqualTo(2);
+        });
+        assertThat(resultado).anySatisfy(c -> {
+            assertThat(c.getInstrumento()).isEqualTo(Instrumento.CANTO);
+            assertThat(c.getCupoMensual()).isEqualTo(2);
+        });
+    }
+
     @Test
     void actualizarCupos_fallaSiLaSumaNoLlegaAlLimiteMensual() {
         when(alumnoRepository.findById(10L)).thenReturn(Optional.of(alumno));

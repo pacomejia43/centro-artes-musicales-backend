@@ -29,9 +29,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -232,21 +232,26 @@ public class AlumnoService {
      * repartir exactamente ese mismo límite entre instrumentos (ej. 2 de piano + 2 de canto),
      * nunca sumar más ni menos — de lo contrario el alumno terminaría con más o menos clases
      * disponibles al mes de las que realmente le tocan.
+     * <p>
+     * El admin puede mandar el mismo instrumento en varios renglones (ej. piano, canto, piano,
+     * canto — para intercalar semanas al generar el ciclo, ver admin-alumnos.html) — aquí se
+     * consolidan sumando sus cantidades, porque alumno_instrumento_cupo solo admite una fila por
+     * (alumno, instrumento) — es un cupo mensual agregado, no una secuencia; el orden en que el
+     * admin capturó los renglones lo respeta programarCiclo directamente a partir de lo que
+     * mandó el formulario, no de este cupo ya consolidado.
      */
     @Transactional
     public List<AlumnoInstrumentoCupo> actualizarCupos(Long alumnoId, List<CupoInstrumentoRequest> items) {
         Alumno alumno = obtenerPorId(alumnoId);
 
-        Set<Instrumento> vistos = new HashSet<>();
+        Map<Instrumento, Integer> totalesPorInstrumento = new LinkedHashMap<>();
         for (CupoInstrumentoRequest item : items) {
-            if (!vistos.add(item.instrumento())) {
-                throw new BusinessRuleException("El instrumento " + item.instrumento() + " está repetido");
-            }
+            totalesPorInstrumento.merge(item.instrumento(), item.cupoMensual(), Integer::sum);
         }
 
-        if (!items.isEmpty()) {
+        if (!totalesPorInstrumento.isEmpty()) {
             int limiteMensual = appProperties.clases().limiteMensual();
-            int total = items.stream().mapToInt(CupoInstrumentoRequest::cupoMensual).sum();
+            int total = totalesPorInstrumento.values().stream().mapToInt(Integer::intValue).sum();
             if (total != limiteMensual) {
                 throw new BusinessRuleException("Los cupos por instrumento deben sumar exactamente "
                         + limiteMensual + " clases al mes en total (suman " + total + ")");
@@ -256,11 +261,11 @@ public class AlumnoService {
         cupoRepository.deleteByAlumno_Id(alumnoId);
         cupoRepository.flush();
 
-        List<AlumnoInstrumentoCupo> nuevos = items.stream()
-                .map(item -> AlumnoInstrumentoCupo.builder()
+        List<AlumnoInstrumentoCupo> nuevos = totalesPorInstrumento.entrySet().stream()
+                .map(entry -> AlumnoInstrumentoCupo.builder()
                         .alumno(alumno)
-                        .instrumento(item.instrumento())
-                        .cupoMensual(item.cupoMensual())
+                        .instrumento(entry.getKey())
+                        .cupoMensual(entry.getValue())
                         .build())
                 .toList();
         return cupoRepository.saveAll(nuevos);
