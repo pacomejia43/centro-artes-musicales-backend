@@ -1,6 +1,7 @@
 package com.centroartesmusicales.backend.service;
 
 import com.centroartesmusicales.backend.config.AppProperties;
+import com.centroartesmusicales.backend.dto.pago.ActualizarPagoRequest;
 import com.centroartesmusicales.backend.dto.pago.CrearPagoRequest;
 import com.centroartesmusicales.backend.dto.pago.RegistrarTransaccionRequest;
 import com.centroartesmusicales.backend.exception.BusinessRuleException;
@@ -228,6 +229,88 @@ class PagoServiceTest {
 
         assertThatThrownBy(() -> pagoService.confirmarTransaccion(80L, 1L))
                 .isInstanceOf(BusinessRuleException.class);
+    }
+
+    // ---------------------------------------------------------------- eliminar transacción
+
+    /** Caso típico: el admin confirmó por error una transacción que el alumno autorreportó. */
+    @Test
+    void eliminarTransaccion_recalculaElSaldoDelPagoTrasQuitarUnaConfirmada() {
+        Pago pago = pagoDe600(EstadoPago.PAGADO);
+        PagoTransaccion transaccion = PagoTransaccion.builder().id(80L).pago(pago)
+                .monto(new BigDecimal("600.00")).estado(EstadoTransaccion.CONFIRMADA).build();
+        when(pagoTransaccionRepository.findById(80L)).thenReturn(Optional.of(transaccion));
+        // Tras borrarla, la suma de confirmadas para este pago ya no la incluye.
+        when(pagoTransaccionRepository.sumConfirmadoByPagoId(50L)).thenReturn(BigDecimal.ZERO);
+
+        pagoService.eliminarTransaccion(80L);
+
+        verify(pagoTransaccionRepository).delete(transaccion);
+        assertThat(pago.getEstado()).isEqualTo(EstadoPago.PENDIENTE);
+    }
+
+    @Test
+    void eliminarTransaccion_fallaSiNoExiste() {
+        when(pagoTransaccionRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> pagoService.eliminarTransaccion(999L))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verify(pagoTransaccionRepository, never()).delete(any());
+    }
+
+    // ---------------------------------------------------------------- actualizarCargo
+
+    @Test
+    void actualizarCargo_cambiaElPeriodoSiNoChocaConOtroCargo() {
+        Pago pago = pagoDe600(EstadoPago.PENDIENTE);
+        YearMonth nuevoPeriodo = YearMonth.now().plusMonths(1);
+        when(pagoRepository.findById(50L)).thenReturn(Optional.of(pago));
+        when(pagoRepository.existsByAlumno_IdAndPeriodo(10L, nuevoPeriodo)).thenReturn(false);
+        when(pagoTransaccionRepository.sumConfirmadoByPagoId(50L)).thenReturn(BigDecimal.ZERO);
+
+        var request = new ActualizarPagoRequest(null, nuevoPeriodo, null, null);
+        Pago resultado = pagoService.actualizarCargo(50L, request);
+
+        assertThat(resultado.getPeriodo()).isEqualTo(nuevoPeriodo);
+    }
+
+    @Test
+    void actualizarCargo_fallaSiElNuevoPeriodoYaTieneOtroCargoDelMismoAlumno() {
+        Pago pago = pagoDe600(EstadoPago.PENDIENTE);
+        YearMonth periodoOcupado = YearMonth.now().plusMonths(1);
+        when(pagoRepository.findById(50L)).thenReturn(Optional.of(pago));
+        when(pagoRepository.existsByAlumno_IdAndPeriodo(10L, periodoOcupado)).thenReturn(true);
+
+        var request = new ActualizarPagoRequest(null, periodoOcupado, null, null);
+
+        assertThatThrownBy(() -> pagoService.actualizarCargo(50L, request))
+                .isInstanceOf(BusinessRuleException.class);
+        assertThat(pago.getPeriodo()).isEqualTo(YearMonth.now());
+    }
+
+    @Test
+    void actualizarCargo_noValidaChoqueSiElPeriodoNoCambia() {
+        Pago pago = pagoDe600(EstadoPago.PENDIENTE);
+        when(pagoRepository.findById(50L)).thenReturn(Optional.of(pago));
+        when(pagoTransaccionRepository.sumConfirmadoByPagoId(50L)).thenReturn(BigDecimal.ZERO);
+
+        var request = new ActualizarPagoRequest(null, YearMonth.now(), null, null);
+        pagoService.actualizarCargo(50L, request);
+
+        verify(pagoRepository, never()).existsByAlumno_IdAndPeriodo(any(), any());
+    }
+
+    @Test
+    void actualizarCargo_recalculaEstadoSiElNuevoMontoYaNoCubreLoPagado() {
+        Pago pago = pagoDe600(EstadoPago.PAGADO);
+        when(pagoRepository.findById(50L)).thenReturn(Optional.of(pago));
+        when(pagoTransaccionRepository.sumConfirmadoByPagoId(50L)).thenReturn(new BigDecimal("600.00"));
+
+        var request = new ActualizarPagoRequest(new BigDecimal("900.00"), null, null, null);
+        Pago resultado = pagoService.actualizarCargo(50L, request);
+
+        assertThat(resultado.getMonto()).isEqualByComparingTo("900.00");
+        assertThat(resultado.getEstado()).isEqualTo(EstadoPago.PARCIAL);
     }
 
     // ---------------------------------------------------------------- vencido (derivado, no persistido)

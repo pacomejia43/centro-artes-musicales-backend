@@ -1,6 +1,7 @@
 package com.centroartesmusicales.backend.controller.admin;
 
 import com.centroartesmusicales.backend.config.AppProperties;
+import com.centroartesmusicales.backend.dto.pago.ActualizarPagoRequest;
 import com.centroartesmusicales.backend.dto.pago.ConfiguracionPagoResponse;
 import com.centroartesmusicales.backend.dto.pago.CrearPagoRequest;
 import com.centroartesmusicales.backend.dto.pago.PagoResponse;
@@ -19,6 +20,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -75,6 +77,13 @@ public class PagoAdminController {
         return ResponseEntity.ok(toResponse(pagoService.obtenerPorId(id)));
     }
 
+    @PutMapping("/pagos/{id}")
+    public ResponseEntity<PagoResponse> actualizarCargo(@PathVariable Long id,
+                                                          @Valid @RequestBody ActualizarPagoRequest request) {
+        Pago pago = pagoService.actualizarCargo(id, request);
+        return ResponseEntity.ok(toResponse(pago));
+    }
+
     @PostMapping("/pagos/{id}/transacciones")
     public ResponseEntity<PagoTransaccionResponse> registrarTransaccion(@PathVariable Long id,
                                                                           @AuthenticationPrincipal SecurityUser admin,
@@ -97,5 +106,11 @@ public class PagoAdminController {
         String motivo = request != null ? request.motivoRechazo() : null;
         var transaccion = pagoService.rechazarTransaccion(id, admin.getId(), motivo);
         return ResponseEntity.ok(PagoMapper.toResponse(transaccion));
+    }
+
+    @DeleteMapping("/pagos/transacciones/{id}")
+    public ResponseEntity<Void> eliminarTransaccion(@PathVariable Long id) {
+        pagoService.eliminarTransaccion(id);
+        return ResponseEntity.noContent().build();
     }
 }

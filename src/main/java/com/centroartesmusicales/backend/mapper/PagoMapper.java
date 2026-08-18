@@ -21,6 +21,7 @@ public final class PagoMapper {
                 pago.getMonto(),
                 pago.getPeriodo().toString(),
                 pago.getFechaLimite(),
+                pago.getNotas(),
                 pago.getEstado(),
                 montoPagado,
                 saldoPendiente,

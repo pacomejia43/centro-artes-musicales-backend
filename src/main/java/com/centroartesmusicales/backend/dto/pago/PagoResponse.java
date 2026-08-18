@@ -13,6 +13,7 @@ public record PagoResponse(
         BigDecimal monto,
         String periodo,
         LocalDate fechaLimite,
+        String notas,
         EstadoPago estado,
         BigDecimal montoPagado,
         BigDecimal saldoPendiente,

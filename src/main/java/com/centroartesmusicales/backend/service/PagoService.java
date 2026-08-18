@@ -1,6 +1,7 @@
 package com.centroartesmusicales.backend.service;
 
 import com.centroartesmusicales.backend.config.AppProperties;
+import com.centroartesmusicales.backend.dto.pago.ActualizarPagoRequest;
 import com.centroartesmusicales.backend.dto.pago.CrearPagoRequest;
 import com.centroartesmusicales.backend.dto.pago.RegistrarTransaccionRequest;
 import com.centroartesmusicales.backend.exception.BusinessRuleException;
@@ -135,6 +136,37 @@ public class PagoService {
         return Optional.of(pagoRepository.save(pago));
     }
 
+    /**
+     * Edita un cargo ya existente — típicamente para corregir el período cuando un pago quedó
+     * registrado en el mes equivocado (ej. correspondía al mes corriente o al que está por
+     * comenzar). Campos nulos no se tocan, igual que AlumnoService#actualizar. Si el período
+     * cambia, se recalcula el estado por si el monto también cambió.
+     */
+    @Transactional
+    public Pago actualizarCargo(Long pagoId, ActualizarPagoRequest request) {
+        Pago pago = obtenerPorId(pagoId);
+
+        if (request.periodo() != null && !request.periodo().equals(pago.getPeriodo())) {
+            if (pagoRepository.existsByAlumno_IdAndPeriodo(pago.getAlumno().getId(), request.periodo())) {
+                throw new BusinessRuleException(
+                        "Ya existe un cargo registrado para el alumno en el período " + request.periodo());
+            }
+            pago.setPeriodo(request.periodo());
+        }
+        if (request.monto() != null) {
+            pago.setMonto(request.monto());
+        }
+        if (request.fechaLimite() != null) {
+            pago.setFechaLimite(request.fechaLimite());
+        }
+        if (request.notas() != null) {
+            pago.setNotas(request.notas());
+        }
+
+        recalcularEstado(pago);
+        return pago;
+    }
+
     /** Precio particular del alumno si el admin se lo asignó; si no, el default global. */
     private BigDecimal montoMensual(Alumno alumno) {
         return alumno.getPrecioMensual() != null ? alumno.getPrecioMensual() : appProperties.pagos().montoMensualDefault();
@@ -215,6 +247,21 @@ public class PagoService {
         transaccion.setRevisadoAt(LocalDateTime.now(zoneId()));
         // No recalcularEstado: a PENDIENTE transaction never affected the balance.
         return pagoTransaccionRepository.save(transaccion);
+    }
+
+    /**
+     * Borra una transacción por completo — a diferencia de rechazar (que la conserva como
+     * RECHAZADA), esto es para cuando el admin confirmó una por error y quiere que desaparezca
+     * del historial, no solo que quede marcada. Funciona en cualquier estado; si estaba
+     * CONFIRMADA, se recalcula el saldo/estado del pago después de quitarla de la suma.
+     */
+    @Transactional
+    public void eliminarTransaccion(Long transaccionId) {
+        PagoTransaccion transaccion = obtenerTransaccion(transaccionId);
+        Pago pago = transaccion.getPago();
+        pagoTransaccionRepository.delete(transaccion);
+        pagoTransaccionRepository.flush();
+        recalcularEstado(pago);
     }
 
     private PagoTransaccion obtenerTransaccion(Long id) {
