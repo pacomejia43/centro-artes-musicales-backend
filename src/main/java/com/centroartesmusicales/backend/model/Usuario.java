@@ -35,12 +35,6 @@ public class Usuario extends Auditable {
     @Column(nullable = false, length = 255)
     private String password;
 
-    /** Copia cifrada (reversible) de la contraseña actual, para que el admin pueda verla/
-     *  compartirla — ver security.PasswordCipherService. Null si aún no se ha capturado ninguna
-     *  contraseña desde que existe esta columna. NO es lo que se usa para autenticar. */
-    @Column(name = "password_visible", length = 500)
-    private String passwordVisible;
-
     @Column(nullable = false, length = 255)
     private String nombre;
 

@@ -129,19 +129,27 @@ public class ClaseService {
      * Fechas del ciclo de 4 clases de un alumno. Si ya se generaron las clases en el calendario
      * (programarCiclo), usa sus fechas reales — así, si el alumno reagenda una y el admin la
      * aprueba, la clase reagendada (nueva fila PROGRAMADA) reemplaza aquí a la original
-     * (que queda REAGENDADA y ya no cuenta). Si todavía no se han agendado, cae a la proyección
-     * pura de CicloClases, la misma que se le anunció al alumno al capturar la fecha.
+     * (que queda REAGENDADA y ya no cuenta). Si todavía no se han agendado NINGUNA, cae a la
+     * proyección pura de CicloClases, la misma que se le anunció al alumno al capturar la fecha.
+     * Si solo se agendaron ALGUNAS (ej. un ciclo mixto generado a medias), completa las semanas
+     * faltantes con esa misma proyección — el ciclo siempre debe mostrar sus 4 fechas.
      */
     public List<LocalDate> resolverFechasCiclo(Long alumnoId, LocalDate fechaPrimeraClase) {
         List<Clase> reales = claseRepository.findActivasDesde(alumnoId, ESTADOS_OCUPAN_CUPO,
                 fechaPrimeraClase.atStartOfDay());
+        List<LocalDate> proyectadas = CicloClases.fechasClases(fechaPrimeraClase);
         if (reales.isEmpty()) {
-            return CicloClases.fechasClases(fechaPrimeraClase);
+            return proyectadas;
         }
-        return reales.stream()
+
+        List<LocalDate> resueltas = new ArrayList<>(reales.stream()
                 .limit(CicloClases.CLASES_POR_CICLO)
                 .map(c -> c.getFechaHora().toLocalDate())
-                .toList();
+                .toList());
+        for (int i = resueltas.size(); i < CicloClases.CLASES_POR_CICLO; i++) {
+            resueltas.add(proyectadas.get(i));
+        }
+        return resueltas;
     }
 
     // ---------------------------------------------------------------- escritura (admin)

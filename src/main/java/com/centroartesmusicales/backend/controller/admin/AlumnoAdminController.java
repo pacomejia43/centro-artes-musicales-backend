@@ -6,7 +6,6 @@ import com.centroartesmusicales.backend.dto.alumno.AlumnoResponse;
 import com.centroartesmusicales.backend.dto.alumno.BitacoraResponse;
 import com.centroartesmusicales.backend.dto.alumno.CrearAlumnoAdminRequest;
 import com.centroartesmusicales.backend.dto.alumno.CupoInstrumentoResponse;
-import com.centroartesmusicales.backend.dto.alumno.PasswordVisibleResponse;
 import com.centroartesmusicales.backend.dto.alumno.ResetPasswordRequest;
 import com.centroartesmusicales.backend.dto.clase.ResumenMesResponse;
 import com.centroartesmusicales.backend.mapper.AlumnoMapper;
@@ -97,11 +96,6 @@ public class AlumnoAdminController {
                                               @Valid @RequestBody ResetPasswordRequest request) {
         alumnoService.resetPassword(id, request.passwordNueva());
         return ResponseEntity.noContent().build();
-    }
-
-    @GetMapping("/{id}/password")
-    public ResponseEntity<PasswordVisibleResponse> verPassword(@PathVariable Long id) {
-        return ResponseEntity.ok(new PasswordVisibleResponse(alumnoService.obtenerPasswordVisible(id)));
     }
 
     @GetMapping("/{id}/bitacora")

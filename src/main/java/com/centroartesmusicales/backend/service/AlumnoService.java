@@ -13,7 +13,6 @@ import com.centroartesmusicales.backend.model.Usuario;
 import com.centroartesmusicales.backend.repository.AlumnoInstrumentoCupoRepository;
 import com.centroartesmusicales.backend.repository.AlumnoRepository;
 import com.centroartesmusicales.backend.repository.UsuarioRepository;
-import com.centroartesmusicales.backend.security.PasswordCipherService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -37,7 +36,6 @@ public class AlumnoService {
     private final UsuarioRepository usuarioRepository;
     private final AlumnoInstrumentoCupoRepository cupoRepository;
     private final PasswordEncoder passwordEncoder;
-    private final PasswordCipherService passwordCipherService;
 
     /**
      * Común a la creación pública (registro con correo real) y la del admin (usuario/contraseña
@@ -55,7 +53,6 @@ public class AlumnoService {
         Usuario usuario = Usuario.builder()
                 .email(email)
                 .password(passwordEncoder.encode(password))
-                .passwordVisible(passwordCipherService.encriptar(password))
                 .nombre(nombre)
                 .role(Role.ALUMNO)
                 .enabled(true)
@@ -190,15 +187,7 @@ public class AlumnoService {
         Alumno alumno = obtenerPorId(id);
         Usuario usuario = alumno.getUsuario();
         usuario.setPassword(passwordEncoder.encode(nuevaPassword));
-        usuario.setPasswordVisible(passwordCipherService.encriptar(nuevaPassword));
         usuarioRepository.save(usuario);
-    }
-
-    /** Null si el alumno todavía no tiene ninguna contraseña capturada desde que existe esta función. */
-    public String obtenerPasswordVisible(Long id) {
-        Alumno alumno = obtenerPorId(id);
-        String cifrado = alumno.getUsuario().getPasswordVisible();
-        return cifrado != null ? passwordCipherService.desencriptar(cifrado) : null;
     }
 
     public List<AlumnoInstrumentoCupo> obtenerCupos(Long alumnoId) {

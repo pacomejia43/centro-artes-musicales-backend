@@ -12,8 +12,7 @@ public record AppProperties(
         Admin admin,
         String timezone,
         Clases clases,
-        Pagos pagos,
-        Security security
+        Pagos pagos
 ) {
 
     public record Jwt(String secret, long expirationMs) {
@@ -31,9 +30,5 @@ public record AppProperties(
     }
 
     public record Pagos(BigDecimal montoMensualDefault) {
-    }
-
-    /** passwordVisibleKey: clave AES-256 (base64, 32 bytes) para PasswordCipherService. */
-    public record Security(String passwordVisibleKey) {
     }
 }

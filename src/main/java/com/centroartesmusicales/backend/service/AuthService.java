@@ -9,7 +9,6 @@ import com.centroartesmusicales.backend.model.Alumno;
 import com.centroartesmusicales.backend.model.Usuario;
 import com.centroartesmusicales.backend.repository.UsuarioRepository;
 import com.centroartesmusicales.backend.security.JwtService;
-import com.centroartesmusicales.backend.security.PasswordCipherService;
 import com.centroartesmusicales.backend.security.SecurityUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -28,7 +27,6 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AlumnoService alumnoService;
-    private final PasswordCipherService passwordCipherService;
 
     @Transactional
     public AuthResponse registro(CrearAlumnoRequest request) {
@@ -64,7 +62,6 @@ public class AuthService {
         }
 
         usuario.setPassword(passwordEncoder.encode(request.passwordNueva()));
-        usuario.setPasswordVisible(passwordCipherService.encriptar(request.passwordNueva()));
         usuarioRepository.save(usuario);
     }
 }
