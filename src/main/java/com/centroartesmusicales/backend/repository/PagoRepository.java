@@ -5,6 +5,7 @@ import com.centroartesmusicales.backend.model.Pago;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -21,6 +22,11 @@ public interface PagoRepository extends JpaRepository<Pago, Long> {
     Optional<Pago> findByAlumno_IdAndPeriodo(Long alumnoId, YearMonth periodo);
 
     Optional<Pago> findFirstByAlumno_IdOrderByPeriodoDesc(Long alumnoId);
+
+    /** Borrado en cascada al eliminar un alumno por completo (ver AlumnoService#eliminar). */
+    @Modifying
+    @Query("DELETE FROM Pago p WHERE p.alumno.id = :alumnoId")
+    void deleteByAlumnoId(@Param("alumnoId") Long alumnoId);
 
     @Query("SELECT p FROM Pago p WHERE "
             + "(:alumnoId IS NULL OR p.alumno.id = :alumnoId) AND "

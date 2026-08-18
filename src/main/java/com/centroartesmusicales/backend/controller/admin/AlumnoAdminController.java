@@ -86,8 +86,8 @@ public class AlumnoAdminController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> desactivar(@PathVariable Long id) {
-        alumnoService.desactivar(id);
+    public ResponseEntity<Void> eliminar(@PathVariable Long id) {
+        alumnoService.eliminar(id);
         return ResponseEntity.noContent().build();
     }
 

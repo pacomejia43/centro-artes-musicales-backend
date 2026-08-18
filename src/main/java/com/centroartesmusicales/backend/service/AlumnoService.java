@@ -12,6 +12,10 @@ import com.centroartesmusicales.backend.model.Role;
 import com.centroartesmusicales.backend.model.Usuario;
 import com.centroartesmusicales.backend.repository.AlumnoInstrumentoCupoRepository;
 import com.centroartesmusicales.backend.repository.AlumnoRepository;
+import com.centroartesmusicales.backend.repository.ClaseRepository;
+import com.centroartesmusicales.backend.repository.PagoRepository;
+import com.centroartesmusicales.backend.repository.PagoTransaccionRepository;
+import com.centroartesmusicales.backend.repository.SolicitudReagendacionRepository;
 import com.centroartesmusicales.backend.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -35,6 +39,10 @@ public class AlumnoService {
     private final AlumnoRepository alumnoRepository;
     private final UsuarioRepository usuarioRepository;
     private final AlumnoInstrumentoCupoRepository cupoRepository;
+    private final ClaseRepository claseRepository;
+    private final PagoRepository pagoRepository;
+    private final PagoTransaccionRepository pagoTransaccionRepository;
+    private final SolicitudReagendacionRepository solicitudReagendacionRepository;
     private final PasswordEncoder passwordEncoder;
 
     /**
@@ -174,12 +182,33 @@ public class AlumnoService {
         }
     }
 
+    /**
+     * Borra al alumno de forma permanente junto con todo lo que depende de él: solicitudes de
+     * reagendación, clases, pagos y sus transacciones, cupos por instrumento, y su cuenta de
+     * usuario (login). No hay ON DELETE CASCADE en la base de datos (ver migraciones db/migration),
+     * así que el orden importa para no violar las FKs:
+     * 1) solicitudes de reagendación (referencian clase_id / clase_nueva_id),
+     * 2) se rompe la auto-referencia clase_original_id de las clases del alumno (reagendos),
+     * 3) transacciones de pago, luego pagos,
+     * 4) clases,
+     * 5) cupos por instrumento,
+     * 6) el alumno y, al final, su usuario.
+     * Para solo ocultar al alumno sin borrar su historial, usar actualizar() con activo=false.
+     */
     @Transactional
-    public void desactivar(Long id) {
+    public void eliminar(Long id) {
         Alumno alumno = obtenerPorId(id);
-        alumno.setActivo(false);
-        alumnoRepository.save(alumno);
-        alumnoRepository.flush(); // Fuerza la escritura inmediata en la base de datos
+        Long usuarioId = alumno.getUsuario().getId();
+
+        solicitudReagendacionRepository.deleteByAlumnoId(id);
+        claseRepository.desvincularOriginalesPorAlumno(id);
+        pagoTransaccionRepository.deleteByPagoAlumnoId(id);
+        pagoRepository.deleteByAlumnoId(id);
+        claseRepository.deleteByAlumnoId(id);
+        cupoRepository.deleteByAlumno_Id(id);
+
+        alumnoRepository.delete(alumno);
+        usuarioRepository.deleteById(usuarioId);
     }
 
     @Transactional

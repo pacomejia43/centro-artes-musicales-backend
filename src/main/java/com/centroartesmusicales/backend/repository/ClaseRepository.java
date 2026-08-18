@@ -6,6 +6,7 @@ import com.centroartesmusicales.backend.model.Instrumento;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -59,6 +60,16 @@ public interface ClaseRepository extends JpaRepository<Clase, Long> {
 
     /** Antes de eliminar: si otra clase apunta a esta como su origen (reagendo), no se puede borrar. */
     boolean existsByClaseOriginal_Id(Long claseOriginalId);
+
+    /** Rompe la cadena de auto-referencia (reagendos) de un alumno antes de borrar sus clases. */
+    @Modifying
+    @Query("UPDATE Clase c SET c.claseOriginal = NULL WHERE c.alumno.id = :alumnoId")
+    void desvincularOriginalesPorAlumno(@Param("alumnoId") Long alumnoId);
+
+    /** Borrado en cascada al eliminar un alumno por completo (ver AlumnoService#eliminar). */
+    @Modifying
+    @Query("DELETE FROM Clase c WHERE c.alumno.id = :alumnoId")
+    void deleteByAlumnoId(@Param("alumnoId") Long alumnoId);
 
     @Query("SELECT c FROM Clase c WHERE "
             + "(:alumnoId IS NULL OR c.alumno.id = :alumnoId) AND "
