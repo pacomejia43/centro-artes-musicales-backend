@@ -32,6 +32,7 @@ import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -113,6 +114,13 @@ public class AlumnoService {
     public Alumno obtenerPorUsuarioId(Long usuarioId) {
         return alumnoRepository.findByUsuarioId(usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Perfil de alumno no encontrado"));
+    }
+
+    /** Usado por StripeWebhookService como respaldo para resolver el alumno de una invoice
+     *  recurrente cuando invoice.paid llega antes de que exista la fila Suscripcion (el orden de
+     *  entrega de webhooks de Stripe no está garantizado). */
+    public Optional<Alumno> obtenerPorStripeCustomerId(String stripeCustomerId) {
+        return alumnoRepository.findByStripeCustomerId(stripeCustomerId);
     }
 
     @Transactional
@@ -222,6 +230,15 @@ public class AlumnoService {
         Usuario usuario = alumno.getUsuario();
         usuario.setPassword(passwordEncoder.encode(nuevaPassword));
         usuarioRepository.save(usuario);
+    }
+
+    /** Solo lo llama StripeCheckoutService/SuscripcionService tras crear el Customer en Stripe
+     *  (ver StripeService#crearCustomer) — nunca se acepta un stripeCustomerId desde el cliente. */
+    @Transactional
+    public void guardarStripeCustomerId(Long alumnoId, String stripeCustomerId) {
+        Alumno alumno = obtenerPorId(alumnoId);
+        alumno.setStripeCustomerId(stripeCustomerId);
+        alumnoRepository.save(alumno);
     }
 
     public List<AlumnoInstrumentoCupo> obtenerCupos(Long alumnoId) {

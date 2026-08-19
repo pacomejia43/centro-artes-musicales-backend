@@ -4,5 +4,6 @@ public enum MetodoPago {
     EFECTIVO,
     TRANSFERENCIA,
     TARJETA,
+    STRIPE,
     OTRO
 }

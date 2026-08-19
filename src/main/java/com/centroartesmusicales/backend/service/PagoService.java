@@ -9,6 +9,7 @@ import com.centroartesmusicales.backend.exception.ResourceNotFoundException;
 import com.centroartesmusicales.backend.model.Alumno;
 import com.centroartesmusicales.backend.model.EstadoPago;
 import com.centroartesmusicales.backend.model.EstadoTransaccion;
+import com.centroartesmusicales.backend.model.MetodoPago;
 import com.centroartesmusicales.backend.model.Pago;
 import com.centroartesmusicales.backend.model.PagoTransaccion;
 import com.centroartesmusicales.backend.model.Usuario;
@@ -167,8 +168,10 @@ public class PagoService {
         return pago;
     }
 
-    /** Precio particular del alumno si el admin se lo asignó; si no, el default global. */
-    private BigDecimal montoMensual(Alumno alumno) {
+    /** Precio particular del alumno si el admin se lo asignó; si no, el default global. Público
+     *  porque StripeCheckoutService/SuscripcionService también lo necesitan — es la única fuente
+     *  de verdad de "cuánto paga este alumno al mes", nunca se duplica este cálculo. */
+    public BigDecimal montoMensual(Alumno alumno) {
         return alumno.getPrecioMensual() != null ? alumno.getPrecioMensual() : appProperties.pagos().montoMensualDefault();
     }
 
@@ -270,14 +273,132 @@ public class PagoService {
     }
 
     private void recalcularEstado(Pago pago) {
+        aplicarEstadoSegunSaldo(pago, EstadoPago.PENDIENTE);
+    }
+
+    /** estadoSiSinPago es PENDIENTE en el camino normal, pero REEMBOLSADO cuando esta
+     *  recalculación se dispara porque se acaba de reembolsar la transacción que cubría el saldo
+     *  (ver marcarReembolsoPorPaymentIntent) — un pago reembolsado no debe verse igual que uno que
+     *  simplemente nunca se pagó. */
+    private void aplicarEstadoSegunSaldo(Pago pago, EstadoPago estadoSiSinPago) {
         BigDecimal pagado = montoPagado(pago);
         if (pagado.compareTo(BigDecimal.ZERO) <= 0) {
-            pago.setEstado(EstadoPago.PENDIENTE);
+            pago.setEstado(estadoSiSinPago);
         } else if (pagado.compareTo(pago.getMonto()) >= 0) {
             pago.setEstado(EstadoPago.PAGADO);
         } else {
             pago.setEstado(EstadoPago.PARCIAL);
         }
         pagoRepository.save(pago);
+    }
+
+    // ---------------------------------------------------------------- Stripe
+
+    /** Datos ya validados que trae un evento de Stripe — StripeWebhookService los arma a partir
+     *  del Event verificado, nunca de nada que haya mandado el frontend. */
+    public record DatosTransaccionStripe(
+            BigDecimal monto,
+            String stripePaymentIntentId,
+            String stripeCheckoutSessionId,
+            String stripeInvoiceId,
+            String stripeSubscriptionId
+    ) {
+    }
+
+    /**
+     * Idempotente por (alumno, periodo): invoice.paid de un cobro recurrente puede necesitar un
+     * Pago del mes que todavía no existía en nuestra BD (el ciclo de Stripe Billing avanza solo).
+     * Si ya existe —por ejemplo porque el admin ya lo había creado a mano— se reutiliza tal cual,
+     * incluyendo su monto ya definido, en vez de pisarlo.
+     */
+    @Transactional
+    public Pago crearOEncontrarCargoParaPeriodo(Long alumnoId, YearMonth periodo, BigDecimal monto) {
+        return pagoRepository.findByAlumno_IdAndPeriodo(alumnoId, periodo)
+                .orElseGet(() -> {
+                    Alumno alumno = alumnoService.obtenerPorId(alumnoId);
+                    Pago pago = Pago.builder()
+                            .alumno(alumno)
+                            .monto(monto)
+                            .periodo(periodo)
+                            .fechaLimite(periodo.atEndOfMonth())
+                            .notas("Generado automáticamente: cobro recurrente de Stripe")
+                            .estado(EstadoPago.PENDIENTE)
+                            .build();
+                    return pagoRepository.save(pago);
+                });
+    }
+
+    /** Análogo a registrarTransaccionAdmin, pero la "confirmación" la dio el webhook de Stripe en
+     *  vez de un admin — por eso registradoPor es el propio alumno y revisadoPor queda vacío (no
+     *  hubo revisión humana). */
+    @Transactional
+    public PagoTransaccion registrarTransaccionStripe(Long pagoId, DatosTransaccionStripe datos) {
+        Pago pago = obtenerPorId(pagoId);
+        Usuario alumnoUsuario = pago.getAlumno().getUsuario();
+        LocalDateTime ahora = LocalDateTime.now(zoneId());
+
+        PagoTransaccion transaccion = PagoTransaccion.builder()
+                .pago(pago)
+                .monto(datos.monto())
+                .fecha(ahora)
+                .metodoPago(MetodoPago.STRIPE)
+                .referencia(referenciaStripe(datos))
+                .estado(EstadoTransaccion.CONFIRMADA)
+                .registradoPor(alumnoUsuario)
+                .revisadoAt(ahora)
+                .stripePaymentIntentId(datos.stripePaymentIntentId())
+                .stripeCheckoutSessionId(datos.stripeCheckoutSessionId())
+                .stripeInvoiceId(datos.stripeInvoiceId())
+                .stripeSubscriptionId(datos.stripeSubscriptionId())
+                .build();
+        transaccion = pagoTransaccionRepository.save(transaccion);
+
+        recalcularEstado(pago);
+        return transaccion;
+    }
+
+    /** payment_intent.payment_failed / invoice.payment_failed: se deja constancia del intento
+     *  fallido, pero —igual que una transacción RECHAZADA— nunca mueve el saldo del Pago. */
+    @Transactional
+    public PagoTransaccion registrarTransaccionFallida(Long pagoId, DatosTransaccionStripe datos) {
+        Pago pago = obtenerPorId(pagoId);
+        Usuario alumnoUsuario = pago.getAlumno().getUsuario();
+
+        PagoTransaccion transaccion = PagoTransaccion.builder()
+                .pago(pago)
+                .monto(datos.monto())
+                .fecha(LocalDateTime.now(zoneId()))
+                .metodoPago(MetodoPago.STRIPE)
+                .referencia(referenciaStripe(datos))
+                .estado(EstadoTransaccion.FALLIDA)
+                .registradoPor(alumnoUsuario)
+                .stripePaymentIntentId(datos.stripePaymentIntentId())
+                .stripeCheckoutSessionId(datos.stripeCheckoutSessionId())
+                .stripeInvoiceId(datos.stripeInvoiceId())
+                .stripeSubscriptionId(datos.stripeSubscriptionId())
+                .build();
+        return pagoTransaccionRepository.save(transaccion);
+    }
+
+    /** charge.refunded: busca la transacción original por payment_intent (así es como llega el
+     *  evento de Stripe) y la marca REEMBOLSADA. Devuelve vacío si no encuentra ninguna
+     *  transacción nuestra con ese payment_intent — puede pasar con un reembolso de un cargo que
+     *  no vino de este sistema; en ese caso no hay nada que reconciliar de nuestro lado. */
+    @Transactional
+    public Optional<PagoTransaccion> marcarReembolsoPorPaymentIntent(String stripePaymentIntentId) {
+        return pagoTransaccionRepository.findByStripePaymentIntentId(stripePaymentIntentId)
+                .map(transaccion -> {
+                    transaccion.setEstado(EstadoTransaccion.REEMBOLSADA);
+                    transaccion = pagoTransaccionRepository.save(transaccion);
+                    aplicarEstadoSegunSaldo(transaccion.getPago(), EstadoPago.REEMBOLSADO);
+                    return transaccion;
+                });
+    }
+
+    private String referenciaStripe(DatosTransaccionStripe datos) {
+        if (datos.stripeCheckoutSessionId() != null) {
+            return datos.stripeCheckoutSessionId();
+        }
+        return datos.stripeInvoiceId();
     }
 }

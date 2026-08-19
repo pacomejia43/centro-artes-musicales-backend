@@ -14,6 +14,8 @@ public record PagoTransaccionResponse(
         String referencia,
         EstadoTransaccion estado,
         String motivoRechazo,
-        LocalDateTime revisadoAt
+        LocalDateTime revisadoAt,
+        String stripeCheckoutSessionId,
+        String stripeSubscriptionId
 ) {
 }

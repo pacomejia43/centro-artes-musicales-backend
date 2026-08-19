@@ -11,6 +11,8 @@ public interface AlumnoRepository extends JpaRepository<Alumno, Long> {
 
     Optional<Alumno> findByUsuarioId(Long usuarioId);
 
+    Optional<Alumno> findByStripeCustomerId(String stripeCustomerId);
+
     Page<Alumno> findByActivo(boolean activo, Pageable pageable);
 
     Page<Alumno> findByUsuario_NombreContainingIgnoreCase(String nombre, Pageable pageable);

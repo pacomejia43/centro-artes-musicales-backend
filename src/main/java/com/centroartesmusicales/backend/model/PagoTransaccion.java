@@ -75,4 +75,19 @@ public class PagoTransaccion extends Auditable {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "registrado_por", nullable = false)
     private Usuario registradoPor;
+
+    /** Presentes solo en transacciones que se originaron en Stripe (metodoPago = STRIPE); null
+     *  en las manuales. checkoutSessionId identifica el intento de pago único que la generó;
+     *  invoice/subscription solo se llenan cuando vino de un cobro recurrente de Billing. */
+    @Column(name = "stripe_payment_intent_id", length = 255)
+    private String stripePaymentIntentId;
+
+    @Column(name = "stripe_checkout_session_id", length = 255)
+    private String stripeCheckoutSessionId;
+
+    @Column(name = "stripe_invoice_id", length = 255)
+    private String stripeInvoiceId;
+
+    @Column(name = "stripe_subscription_id", length = 255)
+    private String stripeSubscriptionId;
 }

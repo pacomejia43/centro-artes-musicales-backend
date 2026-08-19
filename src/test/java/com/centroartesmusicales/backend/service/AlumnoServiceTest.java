@@ -69,7 +69,9 @@ class AlumnoServiceTest {
                 new AppProperties.Admin(new AppProperties.Admin.Bootstrap("", "", "Administrador")),
                 "America/Mexico_City",
                 new AppProperties.Clases(4, 4, 60),
-                new AppProperties.Pagos(new BigDecimal("600.00"))
+                new AppProperties.Pagos(new BigDecimal("600.00")),
+                new AppProperties.Stripe("", "", ""),
+                "http://localhost:5500"
         );
 
         alumnoService = new AlumnoService(alumnoRepository, usuarioRepository, cupoRepository, claseRepository,

@@ -59,6 +59,12 @@ public class Alumno extends Auditable {
     @Column(name = "precio_mensual", precision = 10, scale = 2)
     private BigDecimal precioMensual;
 
+    /** Id del Customer de Stripe asociado a este alumno. Null hasta el primer checkout o
+     *  suscripción — se crea de forma perezosa (ver StripeService#obtenerOCrearCustomer) para no
+     *  generar Customers en Stripe que nunca lleguen a pagar nada. */
+    @Column(name = "stripe_customer_id", length = 255, unique = true)
+    private String stripeCustomerId;
+
     @Column(name = "google_docs_url_1", length = 500)
     private String googleDocsUrl1;
 

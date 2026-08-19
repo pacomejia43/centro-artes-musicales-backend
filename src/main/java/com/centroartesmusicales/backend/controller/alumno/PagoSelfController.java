@@ -1,12 +1,18 @@
 package com.centroartesmusicales.backend.controller.alumno;
 
+import com.centroartesmusicales.backend.dto.pago.CheckoutSessionResponse;
 import com.centroartesmusicales.backend.dto.pago.PagoResponse;
 import com.centroartesmusicales.backend.dto.pago.PagoTransaccionResponse;
 import com.centroartesmusicales.backend.dto.pago.RegistrarTransaccionRequest;
+import com.centroartesmusicales.backend.dto.pago.StripeConfigResponse;
 import com.centroartesmusicales.backend.mapper.PagoMapper;
 import com.centroartesmusicales.backend.model.Pago;
 import com.centroartesmusicales.backend.security.SecurityUser;
 import com.centroartesmusicales.backend.service.PagoService;
+import com.centroartesmusicales.backend.service.StripeCheckoutService;
+import com.centroartesmusicales.backend.service.StripeService;
+import com.stripe.exception.StripeException;
+import com.stripe.model.checkout.Session;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -28,9 +34,27 @@ import org.springframework.web.bind.annotation.RestController;
 public class PagoSelfController {
 
     private final PagoService pagoService;
+    private final StripeCheckoutService stripeCheckoutService;
+    private final StripeService stripeService;
 
     private PagoResponse toResponse(Pago pago) {
         return PagoMapper.toResponse(pago, pagoService.montoPagado(pago), pagoService.esVencido(pago));
+    }
+
+    /** La publishable key de Stripe no es secreta, pero vive en el backend (no hardcodeada en el
+     *  sitio estático) para poder rotarla vía variable de entorno sin tocar el frontend. */
+    @GetMapping("/config")
+    public ResponseEntity<StripeConfigResponse> configuracionStripe() {
+        return ResponseEntity.ok(new StripeConfigResponse(stripeService.publishableKey()));
+    }
+
+    /** El monto de la Checkout Session lo calcula el backend a partir del saldo pendiente real
+     *  del cargo — este endpoint no recibe ni acepta ningún importe del cliente. */
+    @PostMapping("/{id}/checkout")
+    public ResponseEntity<CheckoutSessionResponse> checkout(@AuthenticationPrincipal SecurityUser securityUser,
+                                                              @PathVariable Long id) throws StripeException {
+        Session session = stripeCheckoutService.crearCheckoutParaCargo(securityUser.getId(), id);
+        return ResponseEntity.ok(new CheckoutSessionResponse(session.getUrl()));
     }
 
     @GetMapping

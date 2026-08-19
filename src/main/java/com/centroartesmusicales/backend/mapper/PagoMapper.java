@@ -39,7 +39,9 @@ public final class PagoMapper {
                 transaccion.getReferencia(),
                 transaccion.getEstado(),
                 transaccion.getMotivoRechazo(),
-                transaccion.getRevisadoAt()
+                transaccion.getRevisadoAt(),
+                transaccion.getStripeCheckoutSessionId(),
+                transaccion.getStripeSubscriptionId()
         );
     }
 }

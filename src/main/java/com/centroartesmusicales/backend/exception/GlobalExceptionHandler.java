@@ -1,5 +1,6 @@
 package com.centroartesmusicales.backend.exception;
 
+import com.stripe.exception.StripeException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -84,6 +85,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiError> handleDataIntegrity(DataIntegrityViolationException ex, HttpServletRequest request) {
         return build(HttpStatus.CONFLICT, "La operación viola una restricción de datos (posible duplicado)", request);
+    }
+
+    /** Errores del SDK de Stripe (tarjeta rechazada, API caída, credenciales inválidas, etc.) —
+     *  502 porque el problema es de un servicio externo, no de esta API. */
+    @ExceptionHandler(StripeException.class)
+    public ResponseEntity<ApiError> handleStripe(StripeException ex, HttpServletRequest request) {
+        return build(HttpStatus.BAD_GATEWAY, "No se pudo completar la operación con Stripe: " + ex.getMessage(), request);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

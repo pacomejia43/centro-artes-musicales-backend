@@ -58,6 +58,10 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/registro", "/api/auth/login").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
+                        // Stripe llama este endpoint directamente, sin JWT — la autenticidad de la
+                        // solicitud la garantiza StripeWebhookController validando la firma
+                        // Stripe-Signature con STRIPE_WEBHOOK_SECRET, no Spring Security.
+                        .requestMatchers("/api/stripe/webhook").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/alumno/**").hasRole("ALUMNO")
                         .requestMatchers("/api/auth/**").authenticated()

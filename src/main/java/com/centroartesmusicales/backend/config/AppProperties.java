@@ -12,7 +12,9 @@ public record AppProperties(
         Admin admin,
         String timezone,
         Clases clases,
-        Pagos pagos
+        Pagos pagos,
+        Stripe stripe,
+        String frontendUrl
 ) {
 
     public record Jwt(String secret, long expirationMs) {
@@ -30,5 +32,12 @@ public record AppProperties(
     }
 
     public record Pagos(BigDecimal montoMensualDefault) {
+    }
+
+    public record Stripe(String secretKey, String publishableKey, String webhookSecret) {
+
+        public boolean configurado() {
+            return secretKey != null && !secretKey.isBlank();
+        }
     }
 }
