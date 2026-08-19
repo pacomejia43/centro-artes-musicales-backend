@@ -44,8 +44,10 @@ public class Clase extends Auditable {
     @JoinColumn(name = "alumno_id", nullable = false)
     private Alumno alumno;
 
+    /** Null cuando el profesor que la impartía fue eliminado y no había otro al cual reasignarla
+     *  (ver ProfesorService#eliminar) — queda a la espera de que el admin le asigne uno nuevo. */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "profesor_id", nullable = false)
+    @JoinColumn(name = "profesor_id")
     private Profesor profesor;
 
     @Enumerated(EnumType.STRING)

@@ -3,6 +3,7 @@ package com.centroartesmusicales.backend.repository;
 import com.centroartesmusicales.backend.model.Clase;
 import com.centroartesmusicales.backend.model.EstadoClase;
 import com.centroartesmusicales.backend.model.Instrumento;
+import com.centroartesmusicales.backend.model.Profesor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -70,6 +71,17 @@ public interface ClaseRepository extends JpaRepository<Clase, Long> {
     @Modifying
     @Query("DELETE FROM Clase c WHERE c.alumno.id = :alumnoId")
     void deleteByAlumnoId(@Param("alumnoId") Long alumnoId);
+
+    /** Reasigna a otro profesor todas las clases del profesor eliminado (ver ProfesorService#eliminar). */
+    @Modifying
+    @Query("UPDATE Clase c SET c.profesor = :destino WHERE c.profesor.id = :origenId")
+    void reasignarProfesor(@Param("origenId") Long origenId, @Param("destino") Profesor destino);
+
+    /** Deja sin profesor las clases del profesor eliminado cuando no hay a quién reasignarlas
+     *  (ver ProfesorService#eliminar). */
+    @Modifying
+    @Query("UPDATE Clase c SET c.profesor = NULL WHERE c.profesor.id = :origenId")
+    void vaciarProfesor(@Param("origenId") Long origenId);
 
     @Query("SELECT c FROM Clase c WHERE "
             + "(:alumnoId IS NULL OR c.alumno.id = :alumnoId) AND "

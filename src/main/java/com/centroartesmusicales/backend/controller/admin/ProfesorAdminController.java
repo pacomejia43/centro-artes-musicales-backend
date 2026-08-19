@@ -51,9 +51,12 @@ public class ProfesorAdminController {
         return ResponseEntity.ok(ProfesorMapper.toResponse(profesorService.actualizar(id, request)));
     }
 
+    /** Borrado permanente. Si se manda reemplazoId, las clases del profesor eliminado pasan a ese
+     *  otro profesor; si no, quedan sin profesor asignado (ver ProfesorService#eliminar). */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> desactivar(@PathVariable Long id) {
-        profesorService.desactivar(id);
+    public ResponseEntity<Void> eliminar(@PathVariable Long id,
+                                          @RequestParam(required = false) Long reemplazoId) {
+        profesorService.eliminar(id, reemplazoId);
         return ResponseEntity.noContent().build();
     }
 }

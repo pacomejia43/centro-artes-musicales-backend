@@ -372,6 +372,10 @@ public class ClaseService {
         if (original.getEstado() != EstadoClase.PROGRAMADA) {
             throw new EstadoClaseInvalidoException("Solo se puede reagendar una clase en estado PROGRAMADA");
         }
+        if (profesorDestino == null) {
+            throw new BusinessRuleException(
+                    "Esta clase no tiene profesor asignado (su profesor fue eliminado): elige uno para reagendarla");
+        }
 
         Clase nueva = crearClaseInterna(original.getAlumno(), profesorDestino, original.getInstrumento(),
                 fechaHoraDestino, original.getDuracionMinutos(), original);
@@ -414,7 +418,7 @@ public class ClaseService {
             LocalDateTime finExistente = inicioExistente.plusMinutes(candidata.getDuracionMinutos());
             boolean solapa = fechaHora.isBefore(finExistente) && inicioExistente.isBefore(finNuevo);
             if (solapa) {
-                boolean esProfesor = candidata.getProfesor().getId().equals(profesorId);
+                boolean esProfesor = candidata.getProfesor() != null && candidata.getProfesor().getId().equals(profesorId);
                 throw new ConflictoHorarioException(
                         "Ya existe una clase que se cruza en el horario solicitado para "
                                 + (esProfesor ? "el profesor" : "el alumno"));

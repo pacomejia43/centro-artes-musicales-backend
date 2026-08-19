@@ -23,4 +23,10 @@ public interface SolicitudReagendacionRepository extends JpaRepository<Solicitud
     @Modifying
     @Query("DELETE FROM SolicitudReagendacion s WHERE s.clase.alumno.id = :alumnoId OR s.claseNueva.alumno.id = :alumnoId")
     void deleteByAlumnoId(@Param("alumnoId") Long alumnoId);
+
+    /** Desvincula al profesor propuesto de cualquier solicitud al eliminar ese profesor —
+     *  equivale a "mantener el mismo profesor que la clase original" (ver ProfesorService#eliminar). */
+    @Modifying
+    @Query("UPDATE SolicitudReagendacion s SET s.profesorPropuesto = NULL WHERE s.profesorPropuesto.id = :profesorId")
+    void desvincularProfesorPropuesto(@Param("profesorId") Long profesorId);
 }

@@ -2,9 +2,12 @@ package com.centroartesmusicales.backend.service;
 
 import com.centroartesmusicales.backend.dto.profesor.ActualizarProfesorRequest;
 import com.centroartesmusicales.backend.dto.profesor.CrearProfesorRequest;
+import com.centroartesmusicales.backend.exception.BusinessRuleException;
 import com.centroartesmusicales.backend.exception.ResourceNotFoundException;
 import com.centroartesmusicales.backend.model.Profesor;
+import com.centroartesmusicales.backend.repository.ClaseRepository;
 import com.centroartesmusicales.backend.repository.ProfesorRepository;
+import com.centroartesmusicales.backend.repository.SolicitudReagendacionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -16,6 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class ProfesorService {
 
     private final ProfesorRepository profesorRepository;
+    private final ClaseRepository claseRepository;
+    private final SolicitudReagendacionRepository solicitudReagendacionRepository;
 
     @Transactional
     public Profesor crear(CrearProfesorRequest request) {
@@ -60,15 +65,39 @@ public class ProfesorService {
             profesor.setActivo(request.activo());
         }
         Profesor guardado = profesorRepository.save(profesor);
-        profesorRepository.flush(); // Fuerza la escritura inmediata en la base de datos (ver desactivar())
+        profesorRepository.flush(); // Fuerza la escritura inmediata en la base de datos
         return guardado;
     }
 
+    /**
+     * Borra al profesor de forma permanente. No hay ON DELETE CASCADE para clase.profesor_id ni
+     * para solicitud_reagendacion.profesor_propuesto_id (ver migraciones db/migration), así que antes
+     * de borrar:
+     * 1) si se indicó reemplazoId, todas sus clases se reasignan a ese otro profesor; si no, quedan
+     *    sin profesor asignado (columna nullable desde V13) a la espera de que el admin les asigne uno,
+     * 2) cualquier solicitud de reagendación pendiente que lo proponía como profesor se desvincula
+     *    (vuelve a "mismo profesor que la clase original").
+     * Para solo ocultarlo sin tocar su historial, usar actualizar() con activo=false.
+     */
     @Transactional
-    public void desactivar(Long id) {
+    public void eliminar(Long id, Long reemplazoId) {
         Profesor profesor = obtenerPorId(id);
-        profesor.setActivo(false);
-        profesorRepository.save(profesor);
-        profesorRepository.flush(); // Fuerza la escritura inmediata en la base de datos
+
+        Profesor reemplazo = null;
+        if (reemplazoId != null) {
+            if (reemplazoId.equals(id)) {
+                throw new BusinessRuleException("El profesor de reemplazo debe ser distinto al que se está eliminando");
+            }
+            reemplazo = obtenerPorId(reemplazoId);
+        }
+
+        solicitudReagendacionRepository.desvincularProfesorPropuesto(id);
+        if (reemplazo != null) {
+            claseRepository.reasignarProfesor(id, reemplazo);
+        } else {
+            claseRepository.vaciarProfesor(id);
+        }
+
+        profesorRepository.delete(profesor);
     }
 }
