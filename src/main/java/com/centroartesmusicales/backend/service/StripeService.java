@@ -29,6 +29,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
  * Única capa que habla directamente con el SDK de Stripe. Nunca decide si un alumno puede pagar
@@ -52,15 +53,32 @@ public class StripeService {
         return appProperties.stripe().publishableKey();
     }
 
+    /**
+     * En este proyecto Usuario.email es en realidad un "ID de usuario" (ver el commit que renombró
+     * la etiqueta en el panel de "Email" a "ID usuario") — muchos alumnos tienen ahí un valor como
+     * "Valentina1", no un correo real. La API de Customer.create de Stripe valida el formato y
+     * rechaza la solicitud completa si se le manda algo así, así que solo se incluye email cuando
+     * de verdad tiene forma de correo; si no, Stripe Checkout simplemente lo pide en la propia
+     * pantalla de pago.
+     */
+    private static final Pattern PATRON_EMAIL = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
+
+    /** Sin efectos secundarios a propósito, para poder probarla sin llamar a la API real de Stripe. */
+    static boolean pareceEmailValido(String valor) {
+        return valor != null && PATRON_EMAIL.matcher(valor).matches();
+    }
+
     /** Siempre crea un Customer nuevo — el llamador decide si ya había uno guardado. */
     public String crearCustomer(Alumno alumno) throws StripeException {
         verificarConfigurado();
-        CustomerCreateParams params = CustomerCreateParams.builder()
-                .setEmail(alumno.getUsuario().getEmail())
+        String posibleEmail = alumno.getUsuario().getEmail();
+        CustomerCreateParams.Builder params = CustomerCreateParams.builder()
                 .setName(alumno.getUsuario().getNombre())
-                .putMetadata("student_id", alumno.getId().toString())
-                .build();
-        return Customer.create(params).getId();
+                .putMetadata("student_id", alumno.getId().toString());
+        if (pareceEmailValido(posibleEmail)) {
+            params.setEmail(posibleEmail);
+        }
+        return Customer.create(params.build()).getId();
     }
 
     public String obtenerOCrearPriceUnico(BigDecimal monto) throws StripeException {
