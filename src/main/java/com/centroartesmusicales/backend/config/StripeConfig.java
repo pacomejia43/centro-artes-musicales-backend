@@ -27,6 +27,15 @@ public class StripeConfig {
                     + "responderán con error hasta que se configure.");
             return;
         }
-        Stripe.apiKey = appProperties.stripe().secretKey();
+        String secretKey = appProperties.stripe().secretKey();
+        // AppProperties.Stripe ya recorta espacios al inicio/final; esto detecta el caso menos
+        // común de que haya quedado un espacio EN MEDIO de la clave (ej. si se pegó por error
+        // "clave secreta: sk_test_..." completo) — el SDK la rechazaría igual, pero con un
+        // mensaje genérico que no dice dónde está el problema.
+        if (secretKey.chars().anyMatch(Character::isWhitespace)) {
+            log.error("STRIPE_SECRET_KEY contiene un espacio en medio del valor — revisa la "
+                    + "variable de entorno en Railway y pega solo la clave, sin texto extra alrededor.");
+        }
+        Stripe.apiKey = secretKey;
     }
 }

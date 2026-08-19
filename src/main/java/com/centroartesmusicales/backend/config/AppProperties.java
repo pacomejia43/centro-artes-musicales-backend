@@ -34,7 +34,25 @@ public record AppProperties(
     public record Pagos(BigDecimal montoMensualDefault) {
     }
 
+    /**
+     * Recorta espacios/saltos de línea de las tres claves en el constructor compacto — un
+     * copy-paste hacia la variable de entorno en Railway (o donde sea) fácilmente arrastra un
+     * salto de línea o un espacio de más, y el SDK de Stripe rechaza la clave completa con
+     * "API key is invalid, as it contains whitespace" en cuanto eso pasa. Mejor blindarlo aquí,
+     * en el único punto donde estos valores entran al sistema, que confiar en que cada lugar que
+     * los usa se acuerde de limpiarlos.
+     */
     public record Stripe(String secretKey, String publishableKey, String webhookSecret) {
+
+        public Stripe {
+            secretKey = recortar(secretKey);
+            publishableKey = recortar(publishableKey);
+            webhookSecret = recortar(webhookSecret);
+        }
+
+        private static String recortar(String valor) {
+            return valor != null ? valor.trim() : valor;
+        }
 
         public boolean configurado() {
             return secretKey != null && !secretKey.isBlank();
