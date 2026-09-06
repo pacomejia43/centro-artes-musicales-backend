@@ -23,8 +23,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.YearMonth;
-
 /** Always scoped to the authenticated alumno — never takes an {alumnoId} path param. */
 @RestController
 @RequestMapping("/api/alumno")
@@ -49,9 +47,8 @@ public class ClaseSelfController {
     }
 
     @GetMapping("/resumen-mes")
-    public ResponseEntity<ResumenMesResponse> resumenMes(@AuthenticationPrincipal SecurityUser securityUser,
-                                                           @RequestParam(required = false) YearMonth periodo) {
-        return ResponseEntity.ok(claseService.resumenMesPropio(securityUser.getId(), periodo));
+    public ResponseEntity<ResumenMesResponse> resumenMes(@AuthenticationPrincipal SecurityUser securityUser) {
+        return ResponseEntity.ok(claseService.resumenMesPropio(securityUser.getId()));
     }
 
     @PostMapping("/clases/{id}/solicitudes-reagendacion")

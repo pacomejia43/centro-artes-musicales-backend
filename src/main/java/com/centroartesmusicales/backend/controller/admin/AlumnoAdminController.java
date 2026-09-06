@@ -30,7 +30,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
-import java.time.YearMonth;
 import java.util.List;
 
 @RestController
@@ -106,9 +105,8 @@ public class AlumnoAdminController {
     }
 
     @GetMapping("/{id}/resumen-mes")
-    public ResponseEntity<ResumenMesResponse> resumenMes(@PathVariable Long id,
-                                                          @RequestParam(required = false) YearMonth periodo) {
-        return ResponseEntity.ok(claseService.resumenMes(id, periodo));
+    public ResponseEntity<ResumenMesResponse> resumenMes(@PathVariable Long id) {
+        return ResponseEntity.ok(claseService.resumenMes(id));
     }
 
     @GetMapping("/{id}/cupos")

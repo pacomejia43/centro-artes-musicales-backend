@@ -85,14 +85,46 @@ public class ClaseService {
         return claseRepository.buscar(alumno.getId(), null, estado, null, null, pageable);
     }
 
-    public ResumenMesResponse resumenMes(Long alumnoId, YearMonth periodo) {
-        YearMonth mes = periodo != null ? periodo : YearMonth.now(zoneId());
-        LocalDateTime inicio = mes.atDay(1).atStartOfDay();
-        LocalDateTime fin = mes.plusMonths(1).atDay(1).atStartOfDay();
-        LocalDateTime ahora = LocalDateTime.now(zoneId());
+    /**
+     * Avance del alumno dentro de su ciclo de 4 clases VIGENTE — cuántas ya tomó y cuántas le
+     * faltan, según la fecha de hoy. Antes medía por mes calendario natural (1 al fin de mes), lo
+     * que rompía la cuenta en cuanto el alumno se desfasaba de la semana natural del mes (p.ej.
+     * por un reagendo): con 3 clases en septiembre y 1 en octubre por el desfase, el resumen
+     * mostraba "3 disponibles / 1 tomada" en vez de las 4/0 reales de su ciclo recién pagado.
+     *
+     * Ahora usa la misma ventana de 28 días que resolverFechasCiclo (ver inicioCicloVigente):
+     * "tomadas" son las clases activas de ESE ciclo cuya fecha ya pasó; "disponibles" el resto del
+     * límite. Nunca cuenta clases de un ciclo ya cerrado ni de uno futuro — solo el vigente.
+     *
+     * El parámetro "periodo" (YearMonth) se eliminó: ya no aplica, un ciclo puede cruzar dos
+     * meses calendario (ver caso de Alexandra: 12-sep a 3-oct) y nadie en el frontend lo usaba.
+     */
+    public ResumenMesResponse resumenMes(Long alumnoId) {
+        Alumno alumno = alumnoService.obtenerPorId(alumnoId);
+        LocalDate fechaPrimeraClase = alumno.getFechaPrimeraClase();
 
+        LocalDateTime inicio;
+        LocalDateTime fin;
+        String periodoMostrado;
+        if (fechaPrimeraClase == null) {
+            // Alumno sin ciclo todavía (no se le ha capturado fechaPrimeraClase): no hay ventana
+            // de ciclo que medir. Cae al mes calendario actual como aproximación razonable —
+            // nunca debería bloquear nada porque programar/programarCiclo exigen esta fecha antes
+            // de dejar agendar, así que este caso es solo "el alumno acaba de inscribirse".
+            YearMonth mesActual = YearMonth.now(zoneId());
+            inicio = mesActual.atDay(1).atStartOfDay();
+            fin = mesActual.plusMonths(1).atDay(1).atStartOfDay();
+            periodoMostrado = mesActual.toString();
+        } else {
+            LocalDate inicioCiclo = inicioCicloVigente(alumnoId, fechaPrimeraClase);
+            inicio = inicioCiclo.atStartOfDay();
+            fin = inicioCiclo.plusDays(CicloClases.DIAS_POR_CICLO).atStartOfDay();
+            periodoMostrado = YearMonth.from(inicioCiclo).toString();
+        }
+
+        LocalDateTime ahora = LocalDateTime.now(zoneId());
         // "Tomadas" es solo lo que ya pasó: una PROGRAMADA en el futuro (p.ej. del ciclo generado
-        // de una vez) todavía no fue tomada. "Disponibles" es el resto del límite mensual — las
+        // de una vez) todavía no fue tomada. "Disponibles" es el resto del límite del ciclo — las
         // dos cifras siempre deben sumar el límite (el cupo real ya lo bloquea verificarCupoMensual,
         // que sí cuenta también las futuras; esto es solo para mostrarle el avance al alumno/admin).
         LocalDateTime finTomadas = ahora.isBefore(fin) ? ahora : fin;
@@ -102,7 +134,7 @@ public class ClaseService {
             long tomadas = claseRepository.countOcupadasEnRango(alumnoId, ESTADOS_OCUPAN_CUPO, inicio, finTomadas, null);
             int limite = appProperties.clases().limiteMensual();
             int disponibles = (int) Math.max(0, limite - tomadas);
-            return new ResumenMesResponse(mes.toString(), (int) tomadas, limite, disponibles, List.of());
+            return new ResumenMesResponse(periodoMostrado, (int) tomadas, limite, disponibles, List.of());
         }
 
         List<ResumenMesResponse.ResumenInstrumentoItem> porInstrumento = new ArrayList<>();
@@ -118,12 +150,12 @@ public class ClaseService {
             totalLimite += cupo.getCupoMensual();
         }
         int totalDisponibles = Math.max(0, totalLimite - totalTomadas);
-        return new ResumenMesResponse(mes.toString(), totalTomadas, totalLimite, totalDisponibles, porInstrumento);
+        return new ResumenMesResponse(periodoMostrado, totalTomadas, totalLimite, totalDisponibles, porInstrumento);
     }
 
-    public ResumenMesResponse resumenMesPropio(Long usuarioId, YearMonth periodo) {
+    public ResumenMesResponse resumenMesPropio(Long usuarioId) {
         Alumno alumno = alumnoService.obtenerPorUsuarioId(usuarioId);
-        return resumenMes(alumno.getId(), periodo);
+        return resumenMes(alumno.getId());
     }
 
     /**
@@ -146,26 +178,51 @@ public class ClaseService {
     public List<LocalDate> resolverFechasCiclo(Long alumnoId, LocalDate fechaPrimeraClase) {
         List<Clase> todasActivas = claseRepository.findActivasDesde(alumnoId, ESTADOS_OCUPAN_CUPO,
                 fechaPrimeraClase.atStartOfDay());
-
-        LocalDate inicioCicloVigente = todasActivas.isEmpty()
-                ? fechaPrimeraClase
-                : inicioDelCicloQueContiene(
-                        todasActivas.stream().map(c -> c.getFechaHora().toLocalDate())
-                                .max(LocalDate::compareTo).orElseThrow(),
-                        fechaPrimeraClase);
-        LocalDate finCicloVigente = inicioCicloVigente.plusDays(CicloClases.DIAS_POR_CICLO);
+        LocalDate inicioCiclo = inicioCicloVigenteDadasActivas(todasActivas, fechaPrimeraClase);
+        LocalDate finCicloVigente = inicioCiclo.plusDays(CicloClases.DIAS_POR_CICLO);
 
         List<LocalDate> delCicloVigente = todasActivas.stream()
                 .map(c -> c.getFechaHora().toLocalDate())
-                .filter(fecha -> !fecha.isBefore(inicioCicloVigente) && fecha.isBefore(finCicloVigente))
+                .filter(fecha -> !fecha.isBefore(inicioCiclo) && fecha.isBefore(finCicloVigente))
                 .toList();
 
-        List<LocalDate> proyectadas = CicloClases.fechasClases(inicioCicloVigente);
+        List<LocalDate> proyectadas = CicloClases.fechasClases(inicioCiclo);
         List<LocalDate> resueltas = new ArrayList<>(delCicloVigente);
         for (int i = resueltas.size(); i < CicloClases.CLASES_POR_CICLO; i++) {
             resueltas.add(proyectadas.get(i));
         }
         return resueltas;
+    }
+
+    /**
+     * Fecha de inicio del ciclo de 4 clases VIGENTE de un alumno (el que está en curso ahora, no
+     * el siguiente — contraste con fechaInicioProximoCiclo). Si el alumno ya tiene clases activas,
+     * ubica en qué ciclo cae la más reciente de ellas (ver inicioDelCicloQueContiene). Si no tiene
+     * ninguna todavía, el ciclo vigente es el primero, que arranca en fechaPrimeraClase.
+     *
+     * Compartido por resolverFechasCiclo (preview de fechas) y resumenMes (contador de
+     * tomadas/disponibles) — ambos necesitan la misma ventana de 28 días del ciclo en curso, y
+     * antes cada uno la recalculaba con su propio criterio (resumenMes usaba el mes calendario,
+     * que se desincroniza del ciclo real en cuanto el alumno se desfasa de la semana natural del
+     * mes, p.ej. por un reagendo).
+     */
+    private LocalDate inicioCicloVigente(Long alumnoId, LocalDate fechaPrimeraClase) {
+        List<Clase> todasActivas = claseRepository.findActivasDesde(alumnoId, ESTADOS_OCUPAN_CUPO,
+                fechaPrimeraClase.atStartOfDay());
+        return inicioCicloVigenteDadasActivas(todasActivas, fechaPrimeraClase);
+    }
+
+    /** Misma lógica que inicioCicloVigente, pero recibe las clases activas ya consultadas — evita
+     *  repetir la consulta cuando el llamador (resolverFechasCiclo) ya las necesita para otra cosa. */
+    private LocalDate inicioCicloVigenteDadasActivas(List<Clase> todasActivas, LocalDate fechaPrimeraClase) {
+        if (todasActivas.isEmpty()) {
+            return fechaPrimeraClase;
+        }
+        LocalDate ultimaFecha = todasActivas.stream()
+                .map(c -> c.getFechaHora().toLocalDate())
+                .max(LocalDate::compareTo)
+                .orElseThrow();
+        return inicioDelCicloQueContiene(ultimaFecha, fechaPrimeraClase);
     }
 
     /**

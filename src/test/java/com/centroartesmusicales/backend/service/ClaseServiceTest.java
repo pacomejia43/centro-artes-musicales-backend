@@ -4,6 +4,7 @@ import com.centroartesmusicales.backend.config.AppProperties;
 import com.centroartesmusicales.backend.dto.clase.AsignacionCicloItem;
 import com.centroartesmusicales.backend.dto.clase.ProgramarClaseRequest;
 import com.centroartesmusicales.backend.dto.clase.ReagendarRequest;
+import com.centroartesmusicales.backend.dto.clase.ResumenMesResponse;
 import com.centroartesmusicales.backend.dto.clase.SolicitarReagendacionRequest;
 import com.centroartesmusicales.backend.exception.BusinessRuleException;
 import com.centroartesmusicales.backend.exception.ConflictoHorarioException;
@@ -33,6 +34,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -171,6 +173,80 @@ class ClaseServiceTest {
         assertThatThrownBy(() -> claseService.programar(request))
                 .isInstanceOf(ConflictoHorarioException.class)
                 .hasMessageContaining("alumno");
+    }
+
+    // ---------------------------------------------------------------- resumenMes
+
+    @Test
+    void resumenMes_muestraElLimiteCompletoDisponibleCuandoElCicloVigenteApenasEmpiezaYEsFuturo() {
+        // fechaPrimeraClase en el pasado lejano, última clase activa a 7 días de HOY (en el
+        // futuro): el ciclo vigente arranca hoy y ninguna de sus 4 clases ha pasado todavía.
+        LocalDate fechaPrimeraClase = LocalDate.now().minusWeeks(12);
+        LocalDate inicioCicloVigenteEsperado = LocalDate.now();
+        alumno.setFechaPrimeraClase(fechaPrimeraClase);
+        when(alumnoService.obtenerPorId(10L)).thenReturn(alumno);
+
+        Clase ultimaClaseDelCicloVigente = claseEn(inicioCicloVigenteEsperado.plusWeeks(3));
+        when(claseRepository.findActivasDesde(eq(10L), any(), any()))
+                .thenReturn(List.of(ultimaClaseDelCicloVigente));
+        when(claseRepository.countOcupadasEnRango(any(), any(), any(), any(), any())).thenReturn(0L);
+
+        ResumenMesResponse resumen = claseService.resumenMes(10L);
+
+        assertThat(resumen.clasesTomadas()).isEqualTo(0);
+        assertThat(resumen.clasesDisponibles()).isEqualTo(4);
+    }
+
+    /** Reproduce el caso de Alexandra: ciclo 2 recién generado (12-sep a 3-oct), consultado el
+     *  mismo día en que se pagó (5-sep, antes de que arranque) -> debe ser 4/0, no 3/1. Aquí:
+     *  ciclo anterior CERRADO (hoy-4sem a hoy-1sem) + ciclo vigente que arranca HOY mismo
+     *  (hoy, hoy+1sem, hoy+2sem, hoy+3sem) y todavía no ha pasado ninguna de sus clases. */
+    @Test
+    void resumenMes_noCuentaClasesDeUnCicloQueTodaviaNoArrancaAunqueElAlumnoTengaCiclosAnterioresCerrados() {
+        LocalDate fechaPrimeraClase = LocalDate.now().minusWeeks(8);
+        LocalDate inicioCicloAnterior = LocalDate.now().minusWeeks(4);
+        LocalDate inicioCicloVigente = LocalDate.now();
+        alumno.setFechaPrimeraClase(fechaPrimeraClase);
+        when(alumnoService.obtenerPorId(10L)).thenReturn(alumno);
+
+        List<Clase> todasActivas = List.of(
+                claseEn(inicioCicloAnterior), claseEn(inicioCicloAnterior.plusWeeks(1)),
+                claseEn(inicioCicloAnterior.plusWeeks(2)), claseEn(inicioCicloAnterior.plusWeeks(3)),
+                claseEn(inicioCicloVigente), claseEn(inicioCicloVigente.plusWeeks(1)),
+                claseEn(inicioCicloVigente.plusWeeks(2)), claseEn(inicioCicloVigente.plusWeeks(3)));
+        when(claseRepository.findActivasDesde(eq(10L), any(), any())).thenReturn(todasActivas);
+        when(claseRepository.countOcupadasEnRango(any(), any(), any(), any(), any())).thenReturn(0L);
+
+        ResumenMesResponse resumen = claseService.resumenMes(10L);
+
+        assertThat(resumen.clasesTomadas()).isEqualTo(0);
+        assertThat(resumen.clasesDisponibles()).isEqualTo(4);
+    }
+
+    @Test
+    void resumenMes_caeAlMesCalendarioActualCuandoElAlumnoNoTieneFechaPrimeraClaseTodavia() {
+        alumno.setFechaPrimeraClase(null);
+        when(alumnoService.obtenerPorId(10L)).thenReturn(alumno);
+        when(claseRepository.countOcupadasEnRango(any(), any(), any(), any(), any())).thenReturn(0L);
+
+        ResumenMesResponse resumen = claseService.resumenMes(10L);
+
+        assertThat(resumen.periodo()).isEqualTo(YearMonth.now().toString());
+        assertThat(resumen.clasesDisponibles()).isEqualTo(4);
+        verify(claseRepository, never()).findActivasDesde(any(), any(), any());
+    }
+
+    @Test
+    void resumenMesPropio_resuelveElAlumnoPorUsuarioIdAntesDeConsultarElResumen() {
+        when(alumnoService.obtenerPorUsuarioId(1L)).thenReturn(alumno);
+        alumno.setFechaPrimeraClase(null);
+        when(alumnoService.obtenerPorId(10L)).thenReturn(alumno);
+        when(claseRepository.countOcupadasEnRango(any(), any(), any(), any(), any())).thenReturn(0L);
+
+        ResumenMesResponse resumen = claseService.resumenMesPropio(1L);
+
+        assertThat(resumen).isNotNull();
+        verify(alumnoService).obtenerPorUsuarioId(1L);
     }
 
     // ---------------------------------------------------------------- resolverFechasCiclo
