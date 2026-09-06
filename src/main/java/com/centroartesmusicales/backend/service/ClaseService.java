@@ -35,6 +35,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -126,30 +127,88 @@ public class ClaseService {
     }
 
     /**
-     * Fechas del ciclo de 4 clases de un alumno. Si ya se generaron las clases en el calendario
-     * (programarCiclo), usa sus fechas reales — así, si el alumno reagenda una y el admin la
-     * aprueba, la clase reagendada (nueva fila PROGRAMADA) reemplaza aquí a la original
-     * (que queda REAGENDADA y ya no cuenta). Si todavía no se han agendado NINGUNA, cae a la
-     * proyección pura de CicloClases, la misma que se le anunció al alumno al capturar la fecha.
-     * Si solo se agendaron ALGUNAS (ej. un ciclo mixto generado a medias), completa las semanas
-     * faltantes con esa misma proyección — el ciclo siempre debe mostrar sus 4 fechas.
+     * Fechas del ciclo de 4 clases VIGENTE de un alumno (el más reciente, no siempre el primero).
+     * Primero ubica cuándo arranca ese ciclo (mismo criterio que fechaInicioProximoCiclo, pero
+     * sin el +7 días: aquí queremos el ciclo que YA está en curso, no el siguiente) y luego usa
+     * las fechas reales de las clases activas que caen dentro de esa ventana de 28 días — así, si
+     * el alumno reagenda una y el admin la aprueba, la clase reagendada (nueva fila PROGRAMADA)
+     * reemplaza aquí a la original (que queda REAGENDADA y ya no cuenta). Si el ciclo vigente se
+     * generó solo a medias (ej. un ciclo mixto a medio agendar), completa las semanas faltantes
+     * con la proyección de CicloClases desde el inicio de ESE ciclo — el ciclo siempre debe
+     * mostrar sus 4 fechas. Si el alumno no tiene ninguna clase activa todavía, el "ciclo vigente"
+     * es el primero, y esto cae exactamente en la proyección pura desde fechaPrimeraClase, la
+     * misma que se le anunció al alumno al capturar la fecha.
+     *
+     * Antes tomaba siempre las primeras 4 clases activas del alumno (limit(4) desde el inicio),
+     * así que un alumno con más de un ciclo ya agendado (2do ciclo en adelante) se quedaba viendo
+     * para siempre las fechas de su primer ciclo en vez de las del vigente.
      */
     public List<LocalDate> resolverFechasCiclo(Long alumnoId, LocalDate fechaPrimeraClase) {
-        List<Clase> reales = claseRepository.findActivasDesde(alumnoId, ESTADOS_OCUPAN_CUPO,
+        List<Clase> todasActivas = claseRepository.findActivasDesde(alumnoId, ESTADOS_OCUPAN_CUPO,
                 fechaPrimeraClase.atStartOfDay());
-        List<LocalDate> proyectadas = CicloClases.fechasClases(fechaPrimeraClase);
-        if (reales.isEmpty()) {
-            return proyectadas;
-        }
 
-        List<LocalDate> resueltas = new ArrayList<>(reales.stream()
-                .limit(CicloClases.CLASES_POR_CICLO)
+        LocalDate inicioCicloVigente = todasActivas.isEmpty()
+                ? fechaPrimeraClase
+                : inicioDelCicloQueContiene(
+                        todasActivas.stream().map(c -> c.getFechaHora().toLocalDate())
+                                .max(LocalDate::compareTo).orElseThrow(),
+                        fechaPrimeraClase);
+        LocalDate finCicloVigente = inicioCicloVigente.plusDays(CicloClases.DIAS_POR_CICLO);
+
+        List<LocalDate> delCicloVigente = todasActivas.stream()
                 .map(c -> c.getFechaHora().toLocalDate())
-                .toList());
+                .filter(fecha -> !fecha.isBefore(inicioCicloVigente) && fecha.isBefore(finCicloVigente))
+                .toList();
+
+        List<LocalDate> proyectadas = CicloClases.fechasClases(inicioCicloVigente);
+        List<LocalDate> resueltas = new ArrayList<>(delCicloVigente);
         for (int i = resueltas.size(); i < CicloClases.CLASES_POR_CICLO; i++) {
             resueltas.add(proyectadas.get(i));
         }
         return resueltas;
+    }
+
+    /**
+     * Dado que cada ciclo dura exactamente DIAS_POR_CICLO días desde fechaPrimeraClase, ubica en
+     * qué ciclo cae "fecha" y regresa el primer día de ESE ciclo. Usado para ubicar la ventana del
+     * ciclo vigente en resolverFechasCiclo — nunca se usa para clases anteriores a
+     * fechaPrimeraClase.
+     */
+    private LocalDate inicioDelCicloQueContiene(LocalDate fecha, LocalDate fechaPrimeraClase) {
+        long diasDesdeInicio = ChronoUnit.DAYS.between(fechaPrimeraClase, fecha);
+        long ciclosCompletos = Math.floorDiv(diasDesdeInicio, CicloClases.DIAS_POR_CICLO);
+        return fechaPrimeraClase.plusDays(ciclosCompletos * CicloClases.DIAS_POR_CICLO);
+    }
+
+    /**
+     * Fecha de arranque del PRÓXIMO ciclo de 4 clases a programar. alumno.fechaPrimeraClase es
+     * fija de por vida (se captura una sola vez al inscribir al alumno) y NO se mueve ciclo tras
+     * ciclo, así que no sirve como ancla una vez que el primer ciclo ya se agendó — usarla siempre
+     * hacía que programarCiclo recalculara las mismas 4 fechas del primer ciclo cada vez que se
+     * generaba el segundo, tercero, etc., chocando con las clases reales ya existentes de ciclos
+     * anteriores (ConflictoHorarioException falso, no un cruce real de agenda).
+     *
+     * Si el alumno ya tiene clases activas (no CANCELADA/REAGENDADA), el próximo ciclo arranca 7
+     * días después de la más reciente de ellas — sea cual sea su fecha real, incluyendo cualquier
+     * reagendo ya aprobado (la clase reagendada reemplaza a la original en este cálculo, igual que
+     * en resolverFechasCiclo). Esto es lo que permite que un alumno desfasado de la semana natural
+     * del mes (como uno cuya clase se reagendó) siga generando sus ciclos siguientes en la fecha
+     * que le corresponde a ÉL, no a un calendario mensual fijo.
+     *
+     * Si todavía no tiene ninguna clase activa (alumno nuevo, primer ciclo), arranca en
+     * fechaPrimeraClase tal cual — mismo comportamiento que siempre.
+     */
+    private LocalDate fechaInicioProximoCiclo(Long alumnoId, LocalDate fechaPrimeraClase) {
+        List<Clase> activas = claseRepository.findActivasDesde(alumnoId, ESTADOS_OCUPAN_CUPO,
+                fechaPrimeraClase.atStartOfDay());
+        if (activas.isEmpty()) {
+            return fechaPrimeraClase;
+        }
+        LocalDate ultimaFecha = activas.stream()
+                .map(c -> c.getFechaHora().toLocalDate())
+                .max(LocalDate::compareTo)
+                .orElseThrow();
+        return ultimaFecha.plusWeeks(1);
     }
 
     // ---------------------------------------------------------------- escritura (admin)
@@ -171,11 +230,17 @@ public class ClaseService {
     }
 
     /**
-     * Agenda de un solo golpe las 4 clases semanales del ciclo vigente (ver CicloClases), a partir
-     * de alumno.fechaPrimeraClase, repartidas entre "asignaciones" (instrumento/profesor/hora,
-     * cada una con su cantidad — ver AsignacionCicloItem). Todo o nada: si cualquiera de las 4
-     * choca con un horario ocupado o excede el cupo mensual (por instrumento, si el alumno tiene
-     * cupos configurados), no se crea ninguna.
+     * Agenda de un solo golpe las 4 clases semanales del ciclo vigente (ver CicloClases),
+     * repartidas entre "asignaciones" (instrumento/profesor/hora, cada una con su cantidad — ver
+     * AsignacionCicloItem). Todo o nada: si cualquiera de las 4 choca con un horario ocupado o
+     * excede el cupo mensual (por instrumento, si el alumno tiene cupos configurados), no se crea
+     * ninguna.
+     *
+     * El ciclo arranca en fechaPrimeraClase solo la primera vez (alumno sin clases activas
+     * todavía); si el alumno ya tiene clases previas, arranca una semana después de la más
+     * reciente de ellas — ver fechaInicioProximoCiclo. Así, llamar este método por segunda vez
+     * para el mismo alumno genera el SIGUIENTE ciclo (semanas 5-8) en vez de recalcular las
+     * mismas 4 fechas del primero.
      */
     @Transactional
     public List<Clase> programarCiclo(Long alumnoId, List<AsignacionCicloItem> asignaciones,
@@ -200,7 +265,8 @@ public class ClaseService {
         }
 
         int duracion = duracionMinutos != null ? duracionMinutos : appProperties.clases().duracionDefaultMinutos();
-        List<LocalDate> fechas = CicloClases.fechasClases(alumno.getFechaPrimeraClase());
+        LocalDate inicioCiclo = fechaInicioProximoCiclo(alumnoId, alumno.getFechaPrimeraClase());
+        List<LocalDate> fechas = CicloClases.fechasClases(inicioCiclo);
 
         List<Clase> creadas = new ArrayList<>();
         for (int i = 0; i < fechas.size(); i++) {

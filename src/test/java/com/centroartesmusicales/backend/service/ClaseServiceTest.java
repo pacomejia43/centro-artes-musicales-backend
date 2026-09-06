@@ -1,6 +1,7 @@
 package com.centroartesmusicales.backend.service;
 
 import com.centroartesmusicales.backend.config.AppProperties;
+import com.centroartesmusicales.backend.dto.clase.AsignacionCicloItem;
 import com.centroartesmusicales.backend.dto.clase.ProgramarClaseRequest;
 import com.centroartesmusicales.backend.dto.clase.ReagendarRequest;
 import com.centroartesmusicales.backend.dto.clase.SolicitarReagendacionRequest;
@@ -32,6 +33,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -169,6 +171,150 @@ class ClaseServiceTest {
         assertThatThrownBy(() -> claseService.programar(request))
                 .isInstanceOf(ConflictoHorarioException.class)
                 .hasMessageContaining("alumno");
+    }
+
+    // ---------------------------------------------------------------- resolverFechasCiclo
+
+    @Test
+    void resolverFechasCiclo_proyectaDesdeFechaPrimeraClaseCuandoNoHayClasesActivas() {
+        when(claseRepository.findActivasDesde(eq(10L), any(), any())).thenReturn(List.of());
+
+        List<LocalDate> fechas = claseService.resolverFechasCiclo(10L, LocalDate.of(2026, 8, 15));
+
+        assertThat(fechas).containsExactly(
+                LocalDate.of(2026, 8, 15), LocalDate.of(2026, 8, 22),
+                LocalDate.of(2026, 8, 29), LocalDate.of(2026, 9, 5));
+    }
+
+    /** Con ambos ciclos ya agendados, debe mostrar el SEGUNDO (vigente), no quedarse en el primero. */
+    @Test
+    void resolverFechasCiclo_muestraElCicloVigenteNoElPrimeroCuandoYaHayVariosCiclos() {
+        List<Clase> cicloUno = List.of(
+                claseEn(LocalDate.of(2026, 8, 15)), claseEn(LocalDate.of(2026, 8, 22)),
+                claseEn(LocalDate.of(2026, 8, 30)), claseEn(LocalDate.of(2026, 9, 5)));
+        List<Clase> cicloDos = List.of(
+                claseEn(LocalDate.of(2026, 9, 12)), claseEn(LocalDate.of(2026, 9, 19)),
+                claseEn(LocalDate.of(2026, 9, 26)), claseEn(LocalDate.of(2026, 10, 3)));
+        List<Clase> todas = new ArrayList<>(cicloUno);
+        todas.addAll(cicloDos);
+        when(claseRepository.findActivasDesde(eq(10L), any(), any())).thenReturn(todas);
+
+        List<LocalDate> fechas = claseService.resolverFechasCiclo(10L, LocalDate.of(2026, 8, 15));
+
+        assertThat(fechas).containsExactly(
+                LocalDate.of(2026, 9, 12), LocalDate.of(2026, 9, 19),
+                LocalDate.of(2026, 9, 26), LocalDate.of(2026, 10, 3));
+    }
+
+    /** Ciclo vigente generado solo a medias: completa con proyección sin colar fechas del ciclo anterior. */
+    @Test
+    void resolverFechasCiclo_completaConProyeccionSinMezclarConElCicloAnteriorCuandoElVigenteEstaAMedias() {
+        List<Clase> cicloUno = List.of(
+                claseEn(LocalDate.of(2026, 8, 15)), claseEn(LocalDate.of(2026, 8, 22)),
+                claseEn(LocalDate.of(2026, 8, 30)), claseEn(LocalDate.of(2026, 9, 5)));
+        List<Clase> cicloDosParcial = List.of(
+                claseEn(LocalDate.of(2026, 9, 12)), claseEn(LocalDate.of(2026, 9, 19)));
+        List<Clase> todas = new ArrayList<>(cicloUno);
+        todas.addAll(cicloDosParcial);
+        when(claseRepository.findActivasDesde(eq(10L), any(), any())).thenReturn(todas);
+
+        List<LocalDate> fechas = claseService.resolverFechasCiclo(10L, LocalDate.of(2026, 8, 15));
+
+        assertThat(fechas).containsExactly(
+                LocalDate.of(2026, 9, 12), LocalDate.of(2026, 9, 19),
+                LocalDate.of(2026, 9, 26), LocalDate.of(2026, 10, 3));
+    }
+
+    private Clase claseEn(LocalDate fecha) {
+        return Clase.builder().id((long) fecha.hashCode()).alumno(alumno).profesor(profesor)
+                .instrumento(Instrumento.PIANO).fechaHora(fecha.atTime(16, 0))
+                .duracionMinutos(60).estado(EstadoClase.PROGRAMADA).build();
+    }
+
+    // ---------------------------------------------------------------- programarCiclo
+
+    private AsignacionCicloItem asignacionUnica(int cantidad) {
+        return new AsignacionCicloItem(Instrumento.PIANO, 20L, java.time.LocalTime.of(16, 0), cantidad);
+    }
+
+    @Test
+    void programarCiclo_primerCicloArrancaEnFechaPrimeraClaseCuandoNoHayClasesPrevias() {
+        alumno.setFechaPrimeraClase(LocalDate.of(2026, 8, 15));
+        when(alumnoService.obtenerPorId(10L)).thenReturn(alumno);
+        when(profesorService.obtenerPorId(20L)).thenReturn(profesor);
+        when(claseRepository.findActivasDesde(eq(10L), any(), any())).thenReturn(List.of());
+        when(claseRepository.findCandidatosConflicto(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
+        when(claseRepository.countOcupadasEnRango(any(), any(), any(), any(), any())).thenReturn(0L);
+
+        List<Clase> creadas = claseService.programarCiclo(10L, List.of(asignacionUnica(4)), null, null);
+
+        List<LocalDate> fechas = creadas.stream().map(c -> c.getFechaHora().toLocalDate()).toList();
+        assertThat(fechas).containsExactly(
+                LocalDate.of(2026, 8, 15),
+                LocalDate.of(2026, 8, 22),
+                LocalDate.of(2026, 8, 29),
+                LocalDate.of(2026, 9, 5));
+    }
+
+    /**
+     * Reproduce el caso de Alexandra: primer ciclo 15/22/29-ago (la del 29 fue reagendada al
+     * 30-ago) + 5-sep. Al generar el SEGUNDO ciclo, antes se recalculaba desde fechaPrimeraClase
+     * (15-ago) otra vez y chocaba contra esas mismas clases ya existentes (ConflictoHorarioException
+     * falso). Debe arrancar una semana después de la última clase activa (5-sep) -> 12/19/26-sep + 3-oct.
+     */
+    @Test
+    void programarCiclo_segundoCicloArrancaUnaSemanaDespuesDeLaUltimaClaseActivaDelAlumno() {
+        alumno.setFechaPrimeraClase(LocalDate.of(2026, 8, 15));
+        when(alumnoService.obtenerPorId(10L)).thenReturn(alumno);
+        when(profesorService.obtenerPorId(20L)).thenReturn(profesor);
+
+        Clase clase1 = Clase.builder().id(1L).alumno(alumno).profesor(profesor).instrumento(Instrumento.PIANO)
+                .fechaHora(LocalDate.of(2026, 8, 15).atTime(16, 0)).duracionMinutos(60)
+                .estado(EstadoClase.REALIZADA).build();
+        Clase clase2 = Clase.builder().id(2L).alumno(alumno).profesor(profesor).instrumento(Instrumento.PIANO)
+                .fechaHora(LocalDate.of(2026, 8, 22).atTime(16, 0)).duracionMinutos(60)
+                .estado(EstadoClase.REALIZADA).build();
+        // La del 29-ago se reagendó al 30-ago: la original queda REAGENDADA (no debe contar) y
+        // la nueva fila PROGRAMADA es la que de verdad representa esa semana del ciclo.
+        Clase clase3Reagendada = Clase.builder().id(3L).alumno(alumno).profesor(profesor).instrumento(Instrumento.PIANO)
+                .fechaHora(LocalDate.of(2026, 8, 30).atTime(16, 0)).duracionMinutos(60)
+                .estado(EstadoClase.PROGRAMADA).build();
+        Clase clase4 = Clase.builder().id(4L).alumno(alumno).profesor(profesor).instrumento(Instrumento.PIANO)
+                .fechaHora(LocalDate.of(2026, 9, 5).atTime(16, 0)).duracionMinutos(60)
+                .estado(EstadoClase.PROGRAMADA).build();
+
+        when(claseRepository.findActivasDesde(eq(10L), any(), any()))
+                .thenReturn(List.of(clase1, clase2, clase3Reagendada, clase4));
+        when(claseRepository.findCandidatosConflicto(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
+        when(claseRepository.countOcupadasEnRango(any(), any(), any(), any(), any())).thenReturn(0L);
+
+        List<Clase> creadas = claseService.programarCiclo(10L, List.of(asignacionUnica(4)), null, null);
+
+        List<LocalDate> fechas = creadas.stream().map(c -> c.getFechaHora().toLocalDate()).toList();
+        assertThat(fechas).containsExactly(
+                LocalDate.of(2026, 9, 12),
+                LocalDate.of(2026, 9, 19),
+                LocalDate.of(2026, 9, 26),
+                LocalDate.of(2026, 10, 3));
+    }
+
+    @Test
+    void programarCiclo_fallaCuandoLasCantidadesNoSumanCuatro() {
+        alumno.setFechaPrimeraClase(LocalDate.of(2026, 8, 15));
+        when(alumnoService.obtenerPorId(10L)).thenReturn(alumno);
+
+        assertThatThrownBy(() -> claseService.programarCiclo(10L, List.of(asignacionUnica(3)), null, null))
+                .isInstanceOf(BusinessRuleException.class);
+        verify(claseRepository, never()).save(any());
+    }
+
+    @Test
+    void programarCiclo_fallaCuandoElAlumnoNoTieneFechaPrimeraClase() {
+        alumno.setFechaPrimeraClase(null);
+        when(alumnoService.obtenerPorId(10L)).thenReturn(alumno);
+
+        assertThatThrownBy(() -> claseService.programarCiclo(10L, List.of(asignacionUnica(4)), null, null))
+                .isInstanceOf(BusinessRuleException.class);
     }
 
     // ---------------------------------------------------------------- solicitudes de reagendo
